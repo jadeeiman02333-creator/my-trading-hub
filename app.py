@@ -34,16 +34,19 @@ if "ocr_scanned" not in st.session_state:
     st.session_state.ocr_scanned = False
 if "is_scanning" not in st.session_state:
     st.session_state.is_scanning = False
-if "ocr_data" not in st.session_state:
-    st.session_state.ocr_data = {
-        "entry": 0.0,
-        "sl": 0.0,
-        "tp1": 0.0,
-        "tp2": 0.0,
-        "tp3": 0.0,
-        "lots": 0.10,
-        "direction": "BUY"
-    }
+
+if "ocr_entry" not in st.session_state:
+    st.session_state.ocr_entry = 1.08500
+if "ocr_sl" not in st.session_state:
+    st.session_state.ocr_sl = 1.08300
+if "ocr_tp1" not in st.session_state:
+    st.session_state.ocr_tp1 = 1.08900
+if "ocr_tp2" not in st.session_state:
+    st.session_state.ocr_tp2 = 1.09300
+if "ocr_tp3" not in st.session_state:
+    st.session_state.ocr_tp3 = 1.09700
+if "ocr_lots" not in st.session_state:
+    st.session_state.ocr_lots = 0.10
 
 if "order_direction_vote" not in st.session_state:
     st.session_state.order_direction_vote = "BUY"
@@ -302,15 +305,14 @@ else:
                 time.sleep(0.3)
                 progress_bar.empty()
                 
-                st.session_state.ocr_data = {
-                    "entry": 1.08500,
-                    "sl": 1.08300,
-                    "tp1": 1.08900,
-                    "tp2": 1.09300,
-                    "tp3": 1.09700,
-                    "lots": 0.10,
-                    "direction": "BUY"
-                }
+                # Explicitly update state variables
+                st.session_state.ocr_entry = 1.08500
+                st.session_state.ocr_sl = 1.08300
+                st.session_state.ocr_tp1 = 1.08900
+                st.session_state.ocr_tp2 = 1.09300
+                st.session_state.ocr_tp3 = 1.09700
+                st.session_state.ocr_lots = 0.10
+                
                 st.session_state.is_scanning = False
                 st.session_state.ocr_scanned = True
                 st.rerun()
@@ -323,13 +325,13 @@ else:
             col_price_1, col_price_2 = st.columns(2)
 
             with col_price_1:
-                entry_price = st.number_input("Entry Price", value=st.session_state.ocr_data["entry"], format="%.5f", step=0.00010)
-                stop_loss = st.number_input("Stop Loss (SL)", value=st.session_state.ocr_data["sl"], format="%.5f", step=0.00010)
+                entry_price = st.number_input("Entry Price", key="ocr_entry", format="%.5f", step=0.00010)
+                stop_loss = st.number_input("Stop Loss (SL)", key="ocr_sl", format="%.5f", step=0.00010)
 
             with col_price_2:
-                target_1 = st.number_input("Target 1 (TP1)", value=st.session_state.ocr_data["tp1"], format="%.5f", step=0.00010)
-                target_2 = st.number_input("Target 2 (TP2)", value=st.session_state.ocr_data["tp2"], format="%.5f", step=0.00010)
-                target_3 = st.number_input("Target 3 (TP3)", value=st.session_state.ocr_data["tp3"], format="%.5f", step=0.00010)
+                target_1 = st.number_input("Target 1 (TP1)", key="ocr_tp1", format="%.5f", step=0.00010)
+                target_2 = st.number_input("Target 2 (TP2)", key="ocr_tp2", format="%.5f", step=0.00010)
+                target_3 = st.number_input("Target 3 (TP3)", key="ocr_tp3", format="%.5f", step=0.00010)
 
             st.markdown("---")
             st.markdown("### 🔘 Order Direction Sentiment Poll")
@@ -365,7 +367,7 @@ else:
                 "tp1": target_1,
                 "tp2": target_2,
                 "tp3": target_3,
-                "lots": st.session_state.ocr_data.get("lots", 0.10)
+                "lots": st.session_state.get("ocr_lots", 0.10)
             }
         elif ocr_file is None:
             st.info("💡 Please upload a chart image and click 'Run EasyOCR Extraction' to reveal and verify trade parameters.")
@@ -420,13 +422,12 @@ else:
             col_split_3.metric("Target 3 (20% Volume)", f"{updated_lots * 0.2:.2f} Lots")
 
             # =========================================================
-            # CONSOLIDATED DOWNLOAD CENTER (ALL FORMATS IN ONE SECTION)
+            # CONSOLIDATED DOWNLOAD CENTER
             # =========================================================
             st.markdown("---")
             st.markdown("#### 📥 Export & Download Center")
             st.caption("Download your trade setup parameters in your preferred file format.")
 
-            # Prepare Export Formats
             json_export = json.dumps(order, indent=4)
             
             txt_export = f"""========================================
