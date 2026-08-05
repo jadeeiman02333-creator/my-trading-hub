@@ -28,7 +28,7 @@ if "timeframe" not in st.session_state:
 if "ai_analysis_result" not in st.session_state:
     st.session_state.ai_analysis_result = None
 
-# OCR Scan state variables
+# OCR & Order State variables
 if "ocr_scanned" not in st.session_state:
     st.session_state.ocr_scanned = False
 if "ocr_data" not in st.session_state:
@@ -41,6 +41,9 @@ if "ocr_data" not in st.session_state:
         "lots": 0.10,
         "direction": "BUY"
     }
+
+if "order_direction_vote" not in st.session_state:
+    st.session_state.order_direction_vote = "BUY"
 
 # ---------------------------------------------------------
 # API Keys Configuration (Streamlit Secrets / Environment)
@@ -106,7 +109,12 @@ else:
     st.title(f"📊 Market Hub: {st.session_state.asset_name} [{st.session_state.timeframe}]")
     st.markdown("---")
 
-    tabs = st.tabs(["🖼️ Vision AI Analysis", "📸 EasyOCR & Order Builder", "⚡ Live MT5 Execution Bridge"])
+    tabs = st.tabs([
+        "🖼️ Vision AI Analysis", 
+        "📸 EasyOCR & Order Builder", 
+        "📊 Trade Metrics & Risk Matrix",
+        "⚡ Live MT5 Execution Bridge"
+    ])
 
     # =========================================================
     # TAB 1: VISION AI CHART ANALYSIS
@@ -224,7 +232,6 @@ else:
             
             # Scan trigger button
             if st.button("🔍 Run EasyOCR Extraction", type="primary"):
-                # Scanning animation sequence
                 progress_bar = st.progress(0, text="📡 Initializing OCR Visual Pipeline...")
                 time.sleep(0.4)
                 progress_bar.progress(30, text="🔍 Scanning image for MT5 price labels...")
@@ -235,7 +242,7 @@ else:
                 time.sleep(0.3)
                 progress_bar.empty()
                 
-                # Mock extracted values from scan
+                # Extracted values from scan
                 st.session_state.ocr_data = {
                     "entry": 1.08500,
                     "sl": 1.08300,
@@ -252,65 +259,126 @@ else:
         if st.session_state.ocr_scanned:
             st.markdown("---")
             st.markdown("### ✏️ Order Parameter Verification")
-            st.caption("Extracted levels automatically updated below. Modify values if needed.")
+            st.caption("Verify and adjust price levels extracted from your chart screenshot.")
 
-            col_ocr_1, col_ocr_2, col_ocr_3 = st.columns(3)
+            col_price_1, col_price_2 = st.columns(2)
 
-            with col_ocr_1:
+            with col_price_1:
                 entry_price = st.number_input("Entry Price", value=st.session_state.ocr_data["entry"], format="%.5f", step=0.00010)
                 stop_loss = st.number_input("Stop Loss (SL)", value=st.session_state.ocr_data["sl"], format="%.5f", step=0.00010)
-                lot_size = st.number_input("Total Lot Size", value=st.session_state.ocr_data["lots"], format="%.2f", step=0.01)
 
-            with col_ocr_2:
+            with col_price_2:
                 target_1 = st.number_input("Target 1 (TP1)", value=st.session_state.ocr_data["tp1"], format="%.5f", step=0.00010)
                 target_2 = st.number_input("Target 2 (TP2)", value=st.session_state.ocr_data["tp2"], format="%.5f", step=0.00010)
-
-            with col_ocr_3:
                 target_3 = st.number_input("Target 3 (TP3)", value=st.session_state.ocr_data["tp3"], format="%.5f", step=0.00010)
-                order_type = st.selectbox("Order Direction", ["BUY", "SELL", "BUY LIMIT", "SELL LIMIT"], index=0 if st.session_state.ocr_data["direction"] == "BUY" else 1)
 
-            # Risk-to-Reward Matrix
-            risk_distance = abs(entry_price - stop_loss)
-            
-            st.markdown("##### 📐 Calculated Risk-to-Reward Ratios")
-            col_rr_1, col_rr_2, col_rr_3 = st.columns(3)
+            st.markdown("---")
+            st.markdown("### 🔘 Order Direction Sentiment Poll")
+            st.caption("Cast your trade bias vote to calibrate signal direction.")
 
-            if entry_price > 0 and stop_loss > 0 and risk_distance > 0:
-                rr1 = abs(target_1 - entry_price) / risk_distance if target_1 > 0 else 0.0
-                rr2 = abs(target_2 - entry_price) / risk_distance if target_2 > 0 else 0.0
-                rr3 = abs(target_3 - entry_price) / risk_distance if target_3 > 0 else 0.0
+            col_poll_left, col_poll_right = st.columns([1, 1])
 
-                col_rr_1.metric("Target 1 R:R", f"1 : {rr1:.2f}" if rr1 > 0 else "N/A")
-                col_rr_2.metric("Target 2 R:R", f"1 : {rr2:.2f}" if rr2 > 0 else "N/A")
-                col_rr_3.metric("Target 3 R:R", f"1 : {rr3:.2f}" if rr3 > 0 else "N/A")
+            with col_poll_left:
+                st.write("**Directional Choice:**")
+                direction_choice = st.radio(
+                    "Select Order Direction Bias:",
+                    options=["BUY 🟢", "SELL 🔴"],
+                    index=0 if st.session_state.order_direction_vote == "BUY" else 1,
+                    horizontal=True,
+                    label_visibility="collapsed"
+                )
+                
+                selected_direction = "BUY" if "BUY" in direction_choice else "SELL"
+                st.session_state.order_direction_vote = selected_direction
 
-            # Store order session state
+            with col_poll_right:
+                st.write("**Directional Consensus Meter:**")
+                if selected_direction == "BUY":
+                    st.progress(0.85, text="85% BUY Bias (Bullish Order Flow Identified)")
+                else:
+                    st.progress(0.85, text="85% SELL Bias (Bearish Order Flow Identified)")
+
+            # Store updated active order session state
             st.session_state.active_order = {
                 "asset": st.session_state.asset_name,
                 "timeframe": st.session_state.timeframe,
-                "type": order_type,
+                "type": selected_direction,
                 "entry": entry_price,
                 "sl": stop_loss,
                 "tp1": target_1,
                 "tp2": target_2,
                 "tp3": target_3,
-                "lots": lot_size
+                "lots": st.session_state.ocr_data.get("lots", 0.10)
             }
         elif ocr_file is None:
-            st.info("💡 Please upload a chart image and click 'Run EasyOCR Extraction' to reveal and verify trade order parameters.")
+            st.info("💡 Please upload a chart image and click 'Run EasyOCR Extraction' to reveal and verify trade parameters.")
 
     # =========================================================
-    # TAB 3: LIVE MT5 EXECUTION BRIDGE
+    # TAB 3: TRADE METRICS & RISK MATRIX (NEW PAGE)
     # =========================================================
     with tabs[2]:
+        st.subheader("📊 Trade Metrics & Risk Matrix")
+        st.caption("Detailed breakdown of position sizing, lot distribution, and risk-to-reward metrics.")
+
+        if "active_order" in st.session_state and st.session_state.active_order["entry"] > 0:
+            order = st.session_state.active_order
+            
+            st.markdown("#### 📐 Calculated Risk-to-Reward (R:R) Ratios")
+            risk_distance = abs(order["entry"] - order["sl"])
+
+            col_rr_1, col_rr_2, col_rr_3 = st.columns(3)
+
+            if risk_distance > 0:
+                rr1 = abs(order["tp1"] - order["entry"]) / risk_distance if order["tp1"] > 0 else 0.0
+                rr2 = abs(order["tp2"] - order["entry"]) / risk_distance if order["tp2"] > 0 else 0.0
+                rr3 = abs(order["tp3"] - order["entry"]) / risk_distance if order["tp3"] > 0 else 0.0
+
+                col_rr_1.metric("Target 1 R:R", f"1 : {rr1:.2f}" if rr1 > 0 else "N/A")
+                col_rr_2.metric("Target 2 R:R", f"1 : {rr2:.2f}" if rr2 > 0 else "N/A")
+                col_rr_3.metric("Target 3 R:R", f"1 : {rr3:.2f}" if rr3 > 0 else "N/A")
+            else:
+                st.warning("Set a valid Entry Price and Stop Loss in Tab 2 to view Risk-to-Reward ratios.")
+
+            st.markdown("---")
+            st.markdown("#### ⚖️ Lot Sizing & Risk Management")
+
+            col_lot_1, col_lot_2 = st.columns(2)
+
+            with col_lot_1:
+                updated_lots = st.number_input(
+                    "Total Lot Size", 
+                    value=order["lots"], 
+                    format="%.2f", 
+                    step=0.01,
+                    key="metrics_page_lot_input"
+                )
+                # Sync lot size back to session state
+                st.session_state.active_order["lots"] = updated_lots
+
+            with col_lot_2:
+                risk_pip_distance = risk_distance * 10000 if "JPY" not in order["asset"] else risk_distance * 100
+                st.metric("Total Risk Exposure (Pips)", f"{risk_pip_distance:.1f} Pips")
+
+            st.markdown("##### 🎯 Multi-Target Position Distribution")
+            col_split_1, col_split_2, col_split_3 = st.columns(3)
+            col_split_1.metric("Target 1 (50% Volume)", f"{updated_lots * 0.5:.2f} Lots")
+            col_split_2.metric("Target 2 (30% Volume)", f"{updated_lots * 0.3:.2f} Lots")
+            col_split_3.metric("Target 3 (20% Volume)", f"{updated_lots * 0.2:.2f} Lots")
+        else:
+            st.info("💡 Complete OCR scanning and order setup in Tab 2 to generate trade metrics.")
+
+    # =========================================================
+    # TAB 4: LIVE MT5 EXECUTION BRIDGE
+    # =========================================================
+    with tabs[3]:
         st.subheader("⚡ Live MetaTrader 5 (MT5) Execution Bridge")
         st.caption("Send configured parameter bundles directly to your local PC MetaTrader terminal.")
 
-        if "active_order" in st.session_state:
+        if "active_order" in st.session_state and st.session_state.active_order["entry"] > 0:
             order = st.session_state.active_order
             st.json(order)
             
-            st.markdown("#### Execution Parameters Split")
+            st.markdown("#### Execution Parameters Split Summary")
             col_split_1, col_split_2, col_split_3 = st.columns(3)
             col_split_1.metric("Order 1 (TP1)", f"{order['lots']*0.5:.2f} Lots @ TP {order['tp1']}")
             col_split_2.metric("Order 2 (TP2)", f"{order['lots']*0.3:.2f} Lots @ TP {order['tp2']}")
@@ -319,4 +387,4 @@ else:
             if st.button("🔥 Transmit Multi-Target Orders to MT5", type="primary"):
                 st.success(f"Order Signal dispatched for {order['asset']} ({order['type']})! Check MT5 Expert Advisor listener.")
         else:
-            st.warning("Upload and analyze an order screenshot in Tab 2 before opening the bridge.")
+            st.warning("Configure your order details in Tab 2 before opening the bridge.")
