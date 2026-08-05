@@ -1,5 +1,6 @@
 import os
 import time
+import json
 import streamlit as st
 from PIL import Image
 from google import genai
@@ -58,7 +59,6 @@ ANTHROPIC_KEY = st.secrets.get("ANTHROPIC_API_KEY", os.getenv("ANTHROPIC_API_KEY
 # Helper Component: SVG Circular Gauge Meter
 # ---------------------------------------------------------
 def render_circular_gauge(percentage, label, color):
-    # Calculate circumference & stroke-dashoffset for circular ring
     radius = 54
     circumference = 2 * 3.14159 * radius
     dash_offset = circumference - (percentage / 100.0) * circumference
@@ -66,14 +66,11 @@ def render_circular_gauge(percentage, label, color):
     svg_code = f"""
     <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; background-color: #0e1117; border: 1px solid #262730; border-radius: 12px; padding: 20px;">
         <svg width="140" height="140" viewBox="0 0 120 120">
-            <!-- Background circle -->
             <circle cx="60" cy="60" r="{radius}" stroke="#262730" stroke-width="10" fill="none" />
-            <!-- Animated Progress circle -->
             <circle cx="60" cy="60" r="{radius}" stroke="{color}" stroke-width="10" fill="none"
                     stroke-dasharray="{circumference}" stroke-dashoffset="{dash_offset}"
                     stroke-linecap="round" transform="rotate(-90 60 60)"
                     style="transition: stroke-dashoffset 0.8s ease-in-out;" />
-            <!-- Percentage text -->
             <text x="60" y="60" font-family="sans-serif" font-size="22" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">
                 {int(percentage)}%
             </text>
@@ -132,6 +129,19 @@ with st.sidebar:
             st.session_state.settings_submitted = False
             st.rerun()
 
+    # Mobile Installation Guide
+    st.markdown("---")
+    with st.expander("📱 Install App on Mobile (iOS & Android)"):
+        st.markdown("""
+        **🍏 iPhone / iPad (Safari):**
+        1. Tap the **Share** button (bottom toolbar).
+        2. Tap **Add to Home Screen**.
+
+        **🤖 Android (Google Chrome):**
+        1. Tap the **3 dots `⋮`** (top right).
+        2. Tap **Add to Home screen** or **Install app**.
+        """)
+
 # ---------------------------------------------------------
 # 2. Main Page Navigation & Workspace
 # ---------------------------------------------------------
@@ -172,7 +182,6 @@ else:
             
             if st.button("🚀 Run AI Chart Analysis", type="primary"):
                 with st.spinner(f"Analyzing chart using {st.session_state.model_provider}..."):
-                    
                     prompt = f"""
                     You are an expert Smart Money Concepts (SMC) and Inner Circle Trader (ICT) algorithmic analyst.
                     Analyze this chart screenshot for {st.session_state.asset_name} on the {st.session_state.timeframe} timeframe.
@@ -190,7 +199,6 @@ else:
                        - Recommended Targets (TP1, TP2, TP3)
                     4. Risk-to-Reward Ratio Assessment & Execution Warning
                     """
-                    
                     try:
                         if "Gemini" in st.session_state.model_provider:
                             if not GEMINI_KEY:
@@ -207,6 +215,8 @@ else:
                             if not OPENAI_KEY:
                                 st.error("Missing OPENAI_API_KEY in secrets.")
                             else:
+                                import base64
+                                base64_image = base64.b64encode(uploaded_file.getvalue()).decode("utf-8")
                                 client = openai.OpenAI(api_key=OPENAI_KEY)
                                 response = client.chat.completions.create(
                                     model="gpt-4o",
@@ -217,30 +227,13 @@ else:
                                                 {"type": "text", "text": prompt},
                                                 {
                                                     "type": "image_url",
-                                                    "image_url": {"url": f"data:image/jpeg;base64,{uploaded_file.getvalue()}"}
+                                                    "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}
                                                 }
                                             ]
                                         }
                                     ]
                                 )
                                 st.session_state.ai_analysis_result = response.choices[0].message.content
-                                
-                        elif "Anthropic" in st.session_state.model_provider:
-                            if not ANTHROPIC_KEY:
-                                st.error("Missing ANTHROPIC_API_KEY in secrets.")
-                            else:
-                                client = anthropic.Anthropic(api_key=ANTHROPIC_KEY)
-                                response = client.messages.create(
-                                    model="claude-3-5-sonnet-20240620",
-                                    max_tokens=1500,
-                                    messages=[{
-                                        "role": "user",
-                                        "content": [
-                                            {"type": "text", "text": prompt}
-                                        ]
-                                    }]
-                                )
-                                st.session_state.ai_analysis_result = response.content[0].text
 
                     except Exception as e:
                         st.error(f"Analysis failed: {str(e)}")
@@ -256,13 +249,11 @@ else:
         st.subheader("📸 EasyOCR & Target Order Builder")
         st.caption("Upload your MT5 screenshot to automatically scan price parameters and target levels.")
 
-        # 1. File Uploader
         ocr_file = st.file_uploader("Upload MT5 Chart/Screenshot for OCR Extraction", type=["png", "jpg", "jpeg"], key="ocr_uploader")
         
         if ocr_file is not None:
             ocr_image = Image.open(ocr_file)
             
-            # CSS for Scan Laser Animation Overlay
             st.markdown("""
             <style>
             .scan-wrapper {
@@ -289,7 +280,6 @@ else:
             </style>
             """, unsafe_allow_html=True)
 
-            # Display animated wrapper while scanning
             if st.session_state.is_scanning:
                 st.markdown('<div class="scan-wrapper"><div class="scan-line"></div>', unsafe_allow_html=True)
                 st.image(ocr_image, caption="🔍 Scanning Chart Screenshot with EasyOCR...", use_container_width=True)
@@ -297,12 +287,10 @@ else:
             else:
                 st.image(ocr_image, caption="Uploaded Chart Screenshot", use_container_width=True)
 
-            # Trigger Button
             if st.button("🔍 Run EasyOCR Extraction", type="primary"):
                 st.session_state.is_scanning = True
                 st.rerun()
 
-            # Execute Scanning Routine
             if st.session_state.is_scanning:
                 progress_bar = st.progress(0, text="📡 Initializing OCR Visual Pipeline...")
                 time.sleep(0.5)
@@ -314,7 +302,6 @@ else:
                 time.sleep(0.3)
                 progress_bar.empty()
                 
-                # Mock extracted values from scan
                 st.session_state.ocr_data = {
                     "entry": 1.08500,
                     "sl": 1.08300,
@@ -328,7 +315,6 @@ else:
                 st.session_state.ocr_scanned = True
                 st.rerun()
 
-        # 2. Render Verification Section ONLY AFTER Scanning/Analysis
         if st.session_state.ocr_scanned:
             st.markdown("---")
             st.markdown("### ✏️ Order Parameter Verification")
@@ -365,13 +351,11 @@ else:
                 st.session_state.order_direction_vote = selected_direction
 
             with col_poll_right:
-                # Render SVG Circular Gauge Meter
                 if selected_direction == "BUY":
                     render_circular_gauge(85, "85% BUY Bias (Bullish Order Flow)", "#00E676")
                 else:
                     render_circular_gauge(85, "85% SELL Bias (Bearish Order Flow)", "#FF1744")
 
-            # Store updated active order session state
             st.session_state.active_order = {
                 "asset": st.session_state.asset_name,
                 "timeframe": st.session_state.timeframe,
@@ -409,8 +393,6 @@ else:
                 col_rr_1.metric("Target 1 R:R", f"1 : {rr1:.2f}" if rr1 > 0 else "N/A")
                 col_rr_2.metric("Target 2 R:R", f"1 : {rr2:.2f}" if rr2 > 0 else "N/A")
                 col_rr_3.metric("Target 3 R:R", f"1 : {rr3:.2f}" if rr3 > 0 else "N/A")
-            else:
-                st.warning("Set a valid Entry Price and Stop Loss in Tab 2 to view Risk-to-Reward ratios.")
 
             st.markdown("---")
             st.markdown("#### ⚖️ Lot Sizing & Risk Management")
@@ -436,6 +418,19 @@ else:
             col_split_1.metric("Target 1 (50% Volume)", f"{updated_lots * 0.5:.2f} Lots")
             col_split_2.metric("Target 2 (30% Volume)", f"{updated_lots * 0.3:.2f} Lots")
             col_split_3.metric("Target 3 (20% Volume)", f"{updated_lots * 0.2:.2f} Lots")
+
+            # Download File Button Widget
+            st.markdown("---")
+            st.markdown("#### 📥 Download Trade Parameters")
+            json_export = json.dumps(order, indent=4)
+            st.download_button(
+                label="💾 Download Order File (.json)",
+                data=json_export,
+                file_name=f"{order['asset']}_{order['timeframe']}_Order.json",
+                mime="application/json",
+                type="primary"
+            )
+
         else:
             st.info("💡 Complete OCR scanning and order setup in Tab 2 to generate trade metrics.")
 
