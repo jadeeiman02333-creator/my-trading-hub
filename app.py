@@ -1,7 +1,7 @@
 import os
 import streamlit as st
 from PIL import Image
-import google.generativeai as genai
+from google import genai
 import openai
 import anthropic
 
@@ -62,7 +62,7 @@ with st.sidebar:
             
             model_provider = st.selectbox(
                 "Vision AI Provider",
-                ["Google Gemini 1.5 Pro", "OpenAI GPT-4o", "Anthropic Claude 3.5 Sonnet"]
+                ["Google Gemini 2.5 Flash", "OpenAI GPT-4o", "Anthropic Claude 3.5 Sonnet"]
             )
             
             submit_button = st.form_submit_button(label="Confirm & Unlock Analysis")
@@ -76,7 +76,7 @@ with st.sidebar:
                 st.rerun()
     else:
         st.success(f"Active Pair: **{st.session_state.asset_name}** | **{st.session_state.timeframe}**")
-        st.caption(f"Provider: {st.session_state.get('model_provider', 'Gemini 1.5 Pro')}")
+        st.caption(f"Provider: {st.session_state.get('model_provider', 'Gemini 2.5 Flash')}")
         if st.button("✏️ Edit Settings"):
             st.session_state.settings_submitted = False
             st.rerun()
@@ -137,14 +137,16 @@ else:
                     """
                     
                     try:
-                        # 1. Gemini Implementation
+                        # 1. Google GenAI Implementation (Updated SDK)
                         if "Gemini" in st.session_state.model_provider:
                             if not GEMINI_KEY:
                                 st.error("Missing GEMINI_API_KEY in secrets.")
                             else:
-                                genai.configure(api_key=GEMINI_KEY)
-                                model = genai.GenerativeModel('gemini-1.5-pro')
-                                response = model.generate_content([prompt, image])
+                                client = genai.Client(api_key=GEMINI_KEY)
+                                response = client.models.generate_content(
+                                    model="gemini-2.5-flash",
+                                    contents=[prompt, image]
+                                )
                                 st.session_state.ai_analysis_result = response.text
                                 
                         # 2. OpenAI GPT-4o Implementation
