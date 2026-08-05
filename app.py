@@ -129,7 +129,7 @@ with st.sidebar:
             st.session_state.settings_submitted = False
             st.rerun()
 
-    # Mobile Installation Guide
+    # Mobile PWA Guide
     st.markdown("---")
     with st.expander("📱 Install App on Mobile (iOS & Android)"):
         st.markdown("""
@@ -419,20 +419,64 @@ else:
             col_split_2.metric("Target 2 (30% Volume)", f"{updated_lots * 0.3:.2f} Lots")
             col_split_3.metric("Target 3 (20% Volume)", f"{updated_lots * 0.2:.2f} Lots")
 
-            # Download File Button Widget
+            # =========================================================
+            # CONSOLIDATED DOWNLOAD CENTER (ALL FORMATS IN ONE SECTION)
+            # =========================================================
             st.markdown("---")
-            st.markdown("#### 📥 Download Trade Parameters")
+            st.markdown("#### 📥 Export & Download Center")
+            st.caption("Download your trade setup parameters in your preferred file format.")
+
+            # Prepare Export Formats
             json_export = json.dumps(order, indent=4)
-            st.download_button(
-                label="💾 Download Order File (.json)",
-                data=json_export,
-                file_name=f"{order['asset']}_{order['timeframe']}_Order.json",
-                mime="application/json",
-                type="primary"
-            )
+            
+            txt_export = f"""========================================
+SMART MONEY & ICT TRADE SIGNAL BUNDLE
+========================================
+Asset:        {order['asset']}
+Timeframe:    {order['timeframe']}
+Direction:    {order['type']}
+Total Volume: {order['lots']} Lots
+----------------------------------------
+Entry Price:  {order['entry']}
+Stop Loss:    {order['sl']}
+Target 1:     {order['tp1']} (Split: {order['lots']*0.5:.2f} Lots)
+Target 2:     {order['tp2']} (Split: {order['lots']*0.3:.2f} Lots)
+Target 3:     {order['tp3']} (Split: {order['lots']*0.2:.2f} Lots)
+========================================
+"""
+            csv_export = f"Asset,Timeframe,Type,Entry,StopLoss,TP1,TP2,TP3,TotalLots\n{order['asset']},{order['timeframe']},{order['type']},{order['entry']},{order['sl']},{order['tp1']},{order['tp2']},{order['tp3']},{order['lots']}"
+
+            col_dl_1, col_dl_2, col_dl_3 = st.columns(3)
+
+            with col_dl_1:
+                st.download_button(
+                    label="💾 JSON Format (.json)",
+                    data=json_export,
+                    file_name=f"{order['asset']}_{order['timeframe']}_Signal.json",
+                    mime="application/json",
+                    use_container_width=True
+                )
+
+            with col_dl_2:
+                st.download_button(
+                    label="📄 Text Summary (.txt)",
+                    data=txt_export,
+                    file_name=f"{order['asset']}_{order['timeframe']}_Signal.txt",
+                    mime="text/plain",
+                    use_container_width=True
+                )
+
+            with col_dl_3:
+                st.download_button(
+                    label="📊 CSV Table (.csv)",
+                    data=csv_export,
+                    file_name=f"{order['asset']}_{order['timeframe']}_Signal.csv",
+                    mime="text/csv",
+                    use_container_width=True
+                )
 
         else:
-            st.info("💡 Complete OCR scanning and order setup in Tab 2 to generate trade metrics.")
+            st.info("💡 Complete OCR scanning and order setup in Tab 2 to generate trade metrics and unlock downloads.")
 
     # =========================================================
     # TAB 4: LIVE MT5 EXECUTION BRIDGE
