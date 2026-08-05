@@ -31,6 +31,8 @@ if "ai_analysis_result" not in st.session_state:
 # OCR & Order State variables
 if "ocr_scanned" not in st.session_state:
     st.session_state.ocr_scanned = False
+if "is_scanning" not in st.session_state:
+    st.session_state.is_scanning = False
 if "ocr_data" not in st.session_state:
     st.session_state.ocr_data = {
         "entry": 0.0,
@@ -51,6 +53,37 @@ if "order_direction_vote" not in st.session_state:
 GEMINI_KEY = st.secrets.get("GEMINI_API_KEY", os.getenv("GEMINI_API_KEY", ""))
 OPENAI_KEY = st.secrets.get("OPENAI_API_KEY", os.getenv("OPENAI_API_KEY", ""))
 ANTHROPIC_KEY = st.secrets.get("ANTHROPIC_API_KEY", os.getenv("ANTHROPIC_API_KEY", ""))
+
+# ---------------------------------------------------------
+# Helper Component: SVG Circular Gauge Meter
+# ---------------------------------------------------------
+def render_circular_gauge(percentage, label, color):
+    # Calculate circumference & stroke-dashoffset for circular ring
+    radius = 54
+    circumference = 2 * 3.14159 * radius
+    dash_offset = circumference - (percentage / 100.0) * circumference
+
+    svg_code = f"""
+    <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; background-color: #0e1117; border: 1px solid #262730; border-radius: 12px; padding: 20px;">
+        <svg width="140" height="140" viewBox="0 0 120 120">
+            <!-- Background circle -->
+            <circle cx="60" cy="60" r="{radius}" stroke="#262730" stroke-width="10" fill="none" />
+            <!-- Animated Progress circle -->
+            <circle cx="60" cy="60" r="{radius}" stroke="{color}" stroke-width="10" fill="none"
+                    stroke-dasharray="{circumference}" stroke-dashoffset="{dash_offset}"
+                    stroke-linecap="round" transform="rotate(-90 60 60)"
+                    style="transition: stroke-dashoffset 0.8s ease-in-out;" />
+            <!-- Percentage text -->
+            <text x="60" y="60" font-family="sans-serif" font-size="22" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">
+                {int(percentage)}%
+            </text>
+        </svg>
+        <div style="margin-top: 10px; font-weight: 600; font-size: 14px; color: {color}; text-align: center;">
+            {label}
+        </div>
+    </div>
+    """
+    st.markdown(svg_code, unsafe_allow_html=True)
 
 # ---------------------------------------------------------
 # 1. Sidebar: Asset & Session Settings
@@ -228,21 +261,60 @@ else:
         
         if ocr_file is not None:
             ocr_image = Image.open(ocr_file)
-            st.image(ocr_image, caption="Uploaded Chart Screenshot", use_container_width=True)
             
-            # Scan trigger button
+            # CSS for Scan Laser Animation Overlay
+            st.markdown("""
+            <style>
+            .scan-wrapper {
+                position: relative;
+                overflow: hidden;
+                border-radius: 10px;
+                border: 2px solid #00E676;
+            }
+            .scan-line {
+                position: absolute;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 4px;
+                background: linear-gradient(90deg, rgba(0,230,118,0) 0%, #00E676 50%, rgba(0,230,118,0) 100%);
+                box-shadow: 0 0 15px #00E676, 0 0 25px #00E676;
+                animation: laserScan 2s linear infinite;
+            }
+            @keyframes laserScan {
+                0% { top: 0%; }
+                50% { top: 98%; }
+                100% { top: 0%; }
+            }
+            </style>
+            """, unsafe_allow_html=True)
+
+            # Display animated wrapper while scanning
+            if st.session_state.is_scanning:
+                st.markdown('<div class="scan-wrapper"><div class="scan-line"></div>', unsafe_allow_html=True)
+                st.image(ocr_image, caption="🔍 Scanning Chart Screenshot with EasyOCR...", use_container_width=True)
+                st.markdown('</div>', unsafe_allow_html=True)
+            else:
+                st.image(ocr_image, caption="Uploaded Chart Screenshot", use_container_width=True)
+
+            # Trigger Button
             if st.button("🔍 Run EasyOCR Extraction", type="primary"):
+                st.session_state.is_scanning = True
+                st.rerun()
+
+            # Execute Scanning Routine
+            if st.session_state.is_scanning:
                 progress_bar = st.progress(0, text="📡 Initializing OCR Visual Pipeline...")
-                time.sleep(0.4)
-                progress_bar.progress(30, text="🔍 Scanning image for MT5 price labels...")
                 time.sleep(0.5)
-                progress_bar.progress(70, text="⚡ Extracting Entry, SL, and TP targets...")
-                time.sleep(0.5)
+                progress_bar.progress(35, text="🔍 Scanning image for price labels...")
+                time.sleep(0.6)
+                progress_bar.progress(75, text="⚡ Extracting Entry, SL, and TP levels...")
+                time.sleep(0.6)
                 progress_bar.progress(100, text="✅ OCR Extraction Complete!")
                 time.sleep(0.3)
                 progress_bar.empty()
                 
-                # Extracted values from scan
+                # Mock extracted values from scan
                 st.session_state.ocr_data = {
                     "entry": 1.08500,
                     "sl": 1.08300,
@@ -252,6 +324,7 @@ else:
                     "lots": 0.10,
                     "direction": "BUY"
                 }
+                st.session_state.is_scanning = False
                 st.session_state.ocr_scanned = True
                 st.rerun()
 
@@ -276,10 +349,10 @@ else:
             st.markdown("### 🔘 Order Direction Sentiment Poll")
             st.caption("Cast your trade bias vote to calibrate signal direction.")
 
-            col_poll_left, col_poll_right = st.columns([1, 1])
+            col_poll_left, col_poll_right = st.columns([1.2, 1])
 
             with col_poll_left:
-                st.write("**Directional Choice:**")
+                st.write("**Directional Bias:**")
                 direction_choice = st.radio(
                     "Select Order Direction Bias:",
                     options=["BUY 🟢", "SELL 🔴"],
@@ -292,11 +365,11 @@ else:
                 st.session_state.order_direction_vote = selected_direction
 
             with col_poll_right:
-                st.write("**Directional Consensus Meter:**")
+                # Render SVG Circular Gauge Meter
                 if selected_direction == "BUY":
-                    st.progress(0.85, text="85% BUY Bias (Bullish Order Flow Identified)")
+                    render_circular_gauge(85, "85% BUY Bias (Bullish Order Flow)", "#00E676")
                 else:
-                    st.progress(0.85, text="85% SELL Bias (Bearish Order Flow Identified)")
+                    render_circular_gauge(85, "85% SELL Bias (Bearish Order Flow)", "#FF1744")
 
             # Store updated active order session state
             st.session_state.active_order = {
@@ -314,7 +387,7 @@ else:
             st.info("💡 Please upload a chart image and click 'Run EasyOCR Extraction' to reveal and verify trade parameters.")
 
     # =========================================================
-    # TAB 3: TRADE METRICS & RISK MATRIX (NEW PAGE)
+    # TAB 3: TRADE METRICS & RISK MATRIX
     # =========================================================
     with tabs[2]:
         st.subheader("📊 Trade Metrics & Risk Matrix")
@@ -352,7 +425,6 @@ else:
                     step=0.01,
                     key="metrics_page_lot_input"
                 )
-                # Sync lot size back to session state
                 st.session_state.active_order["lots"] = updated_lots
 
             with col_lot_2:
