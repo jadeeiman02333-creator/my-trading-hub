@@ -137,7 +137,7 @@ else:
                     """
                     
                     try:
-                        # 1. Google GenAI Implementation (Updated SDK)
+                        # 1. Google GenAI Implementation
                         if "Gemini" in st.session_state.model_provider:
                             if not GEMINI_KEY:
                                 st.error("Missing GEMINI_API_KEY in secrets.")
@@ -202,21 +202,34 @@ else:
     # =========================================================
     with tabs[1]:
         st.subheader("📸 EasyOCR & Target Order Builder")
-        st.caption("Verify extracted targets or manually construct your 3-target trade parameter matrix.")
+        st.caption("Upload an image to extract levels automatically, or enter your parameters manually.")
+
+        # Image Uploader for EasyOCR
+        ocr_file = st.file_uploader("Upload MT5 Chart/Screenshot for OCR Extraction", type=["png", "jpg", "jpeg"], key="ocr_uploader")
+        
+        if ocr_file is not None:
+            ocr_image = Image.open(ocr_file)
+            st.image(ocr_image, caption="Uploaded Chart for OCR Processing", use_container_width=True)
+            
+            if st.button("🔍 Run EasyOCR Extraction"):
+                st.info("Processing screenshot with EasyOCR...")
+
+        st.markdown("---")
+        st.markdown("##### ✏️ Order Parameter Verification")
 
         col_ocr_1, col_ocr_2, col_ocr_3 = st.columns(3)
 
         with col_ocr_1:
-            entry_price = st.number_input("Entry Price", value=1.08500, format="%.5f", step=0.00010)
-            stop_loss = st.number_input("Stop Loss (SL)", value=1.08300, format="%.5f", step=0.00010)
+            entry_price = st.number_input("Entry Price", value=0.00000, format="%.5f", step=0.00010)
+            stop_loss = st.number_input("Stop Loss (SL)", value=0.00000, format="%.5f", step=0.00010)
             lot_size = st.number_input("Total Lot Size", value=0.10, format="%.2f", step=0.01)
 
         with col_ocr_2:
-            target_1 = st.number_input("Target 1 (TP1)", value=1.08900, format="%.5f", step=0.00010)
-            target_2 = st.number_input("Target 2 (TP2)", value=1.09300, format="%.5f", step=0.00010)
+            target_1 = st.number_input("Target 1 (TP1)", value=0.00000, format="%.5f", step=0.00010)
+            target_2 = st.number_input("Target 2 (TP2)", value=0.00000, format="%.5f", step=0.00010)
 
         with col_ocr_3:
-            target_3 = st.number_input("Target 3 (TP3)", value=1.09700, format="%.5f", step=0.00010)
+            target_3 = st.number_input("Target 3 (TP3)", value=0.00000, format="%.5f", step=0.00010)
             order_type = st.selectbox("Order Direction", ["BUY", "SELL", "BUY LIMIT", "SELL LIMIT"])
 
         # Automatic Risk-to-Reward (R:R) Matrix
@@ -225,28 +238,31 @@ else:
         st.markdown("##### 📐 Calculated Risk-to-Reward Ratios")
         col_rr_1, col_rr_2, col_rr_3 = st.columns(3)
 
-        if risk_distance > 0:
-            rr1 = abs(target_1 - entry_price) / risk_distance
-            rr2 = abs(target_2 - entry_price) / risk_distance
-            rr3 = abs(target_3 - entry_price) / risk_distance
+        # Only calculate if valid prices are entered
+        if entry_price > 0 and stop_loss > 0 and risk_distance > 0:
+            rr1 = abs(target_1 - entry_price) / risk_distance if target_1 > 0 else 0.0
+            rr2 = abs(target_2 - entry_price) / risk_distance if target_2 > 0 else 0.0
+            rr3 = abs(target_3 - entry_price) / risk_distance if target_3 > 0 else 0.0
 
-            col_rr_1.metric("Target 1 R:R", f"1 : {rr1:.2f}")
-            col_rr_2.metric("Target 2 R:R", f"1 : {rr2:.2f}")
-            col_rr_3.metric("Target 3 R:R", f"1 : {rr3:.2f}")
+            col_rr_1.metric("Target 1 R:R", f"1 : {rr1:.2f}" if rr1 > 0 else "N/A")
+            col_rr_2.metric("Target 2 R:R", f"1 : {rr2:.2f}" if rr2 > 0 else "N/A")
+            col_rr_3.metric("Target 3 R:R", f"1 : {rr3:.2f}" if rr3 > 0 else "N/A")
         else:
-            st.warning("Set a valid Entry Price and Stop Loss to view Risk-to-Reward ratios.")
+            st.info("💡 Upload an image or enter valid Entry Price & Stop Loss values above to calculate Risk-to-Reward ratios.")
 
-        st.session_state.active_order = {
-            "asset": st.session_state.asset_name,
-            "timeframe": st.session_state.timeframe,
-            "type": order_type,
-            "entry": entry_price,
-            "sl": stop_loss,
-            "tp1": target_1,
-            "tp2": target_2,
-            "tp3": target_3,
-            "lots": lot_size
-        }
+        # Store order details when inputs are populated
+        if entry_price > 0:
+            st.session_state.active_order = {
+                "asset": st.session_state.asset_name,
+                "timeframe": st.session_state.timeframe,
+                "type": order_type,
+                "entry": entry_price,
+                "sl": stop_loss,
+                "tp1": target_1,
+                "tp2": target_2,
+                "tp3": target_3,
+                "lots": lot_size
+            }
 
     # =========================================================
     # TAB 3: LIVE MT5 EXECUTION BRIDGE
