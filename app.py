@@ -26,6 +26,7 @@ if "timeframe" not in st.session_state:
 with st.sidebar:
     st.header("⚙️ Asset & Session Settings")
     
+    # Form visible BEFORE confirmation
     if not st.session_state.settings_submitted:
         with st.form(key="asset_settings_form"):
             asset_input = st.text_input(
@@ -47,8 +48,10 @@ with st.sidebar:
                 st.session_state.timeframe = timeframe_input
                 st.session_state.settings_submitted = True
                 st.rerun()
+                
+    # Summary box visible AFTER confirmation (Form closes automatically)
     else:
-        st.success(f"Active Pair: **{st.session_state.asset_name}** | Timeframe: **{st.session_state.timeframe}**")
+        st.success(f"Active Pair: **{st.session_state.asset_name}**\nTimeframe: **{st.session_state.timeframe}**")
         if st.button("✏️ Edit Settings"):
             st.session_state.settings_submitted = False
             st.rerun()
@@ -58,7 +61,7 @@ with st.sidebar:
 # ---------------------------------------------------------
 if not st.session_state.settings_submitted:
     st.title("📈 Smart Money Trading Hub")
-    st.info("👈 Enter your setup details in the left sidebar and click 'Confirm & Unlock Analysis' to proceed.")
+    st.info("Enter your setup details in the left sidebar and click 'Confirm & Unlock Analysis' to proceed.")
 else:
     st.title(f"📊 Market Hub: {st.session_state.asset_name} [{st.session_state.timeframe}]")
     st.markdown("---")
@@ -115,4 +118,4 @@ else:
     }
 
     st.markdown("---")
-    st.success(" Ready for Vision AI Chart Analysis and MT5 Execution.")
+    st.success("Ready for Vision AI Chart Analysis and MT5 Execution.")
