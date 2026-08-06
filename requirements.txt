@@ -1,13 +1,6 @@
---extra-index-url https://download.pytorch.org/whl/cpu
-
 streamlit
-numpy<2.0.0
 pillow
 python-dotenv
 google-genai
 openai
 anthropic
-opencv-python-headless
-torch
-torchvision
-easyocr
