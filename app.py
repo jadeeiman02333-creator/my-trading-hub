@@ -37,20 +37,34 @@ if "is_scanning" not in st.session_state:
     st.session_state.is_scanning = False
 
 if "ocr_entry" not in st.session_state:
-    st.session_state.ocr_entry = 0.0
+    st.session_state.ocr_entry = 1.08500
 if "ocr_sl" not in st.session_state:
-    st.session_state.ocr_sl = 0.0
+    st.session_state.ocr_sl = 1.08300
 if "ocr_tp1" not in st.session_state:
-    st.session_state.ocr_tp1 = 0.0
+    st.session_state.ocr_tp1 = 1.08900
 if "ocr_tp2" not in st.session_state:
-    st.session_state.ocr_tp2 = 0.0
+    st.session_state.ocr_tp2 = 1.09300
 if "ocr_tp3" not in st.session_state:
-    st.session_state.ocr_tp3 = 0.0
+    st.session_state.ocr_tp3 = 1.09700
 if "ocr_lots" not in st.session_state:
     st.session_state.ocr_lots = 0.10
 
 if "order_direction_vote" not in st.session_state:
     st.session_state.order_direction_vote = "BUY"
+
+# Default Active Order Initialization so download links are always live
+if "active_order" not in st.session_state:
+    st.session_state.active_order = {
+        "asset": st.session_state.asset_name,
+        "timeframe": st.session_state.timeframe,
+        "type": "BUY",
+        "entry": 1.08500,
+        "sl": 1.08300,
+        "tp1": 1.08900,
+        "tp2": 1.09300,
+        "tp3": 1.09700,
+        "lots": 0.10
+    }
 
 # ---------------------------------------------------------
 # API Keys Configuration (Streamlit Secrets / Environment)
@@ -113,8 +127,7 @@ def extract_chart_levels_with_ai(image_file):
                 contents=[prompt, image]
             )
             clean_json = re.sub(r'```json|```', '', res.text).strip()
-            data = json.loads(clean_json)
-            return data
+            return json.loads(clean_json)
         elif OPENAI_KEY:
             import base64
             base64_image = base64.b64encode(image_file.getvalue()).decode("utf-8")
@@ -134,7 +147,6 @@ def extract_chart_levels_with_ai(image_file):
     except Exception as e:
         st.warning(f"AI Vision extraction fallback used: {str(e)}")
     
-    # Fallback default if API key is unconfigured
     return {"entry": 4252.45, "sl": 4240.00, "tp1": 4270.00, "tp2": 4290.00, "tp3": 4310.00}
 
 # ---------------------------------------------------------
@@ -351,7 +363,6 @@ else:
                 time.sleep(0.3)
                 progress_bar.progress(35, text="🔍 Scanning image for price labels...")
                 
-                # Perform real vision extraction on uploaded image
                 extracted_data = extract_chart_levels_with_ai(ocr_file)
                 
                 progress_bar.progress(75, text="⚡ Extracting Entry, SL, and TP levels...")
@@ -360,7 +371,6 @@ else:
                 time.sleep(0.2)
                 progress_bar.empty()
                 
-                # Dynamically set extracted price values into state
                 st.session_state.ocr_entry = float(extracted_data.get("entry", 0.0))
                 st.session_state.ocr_sl = float(extracted_data.get("sl", 0.0))
                 st.session_state.ocr_tp1 = float(extracted_data.get("tp1", 0.0))
@@ -377,7 +387,6 @@ else:
             st.markdown("### ✏️ Order Parameter Verification")
             st.caption("Verify and adjust price levels extracted from your chart screenshot.")
 
-            # Dynamic step and format detection based on asset price magnitude (e.g. Gold vs Forex)
             is_high_value = st.session_state.ocr_entry > 500
             step_val = 0.10 if is_high_value else 0.00010
             fmt_val = "%.2f" if is_high_value else "%.5f"
@@ -430,67 +439,66 @@ else:
                 "lots": st.session_state.get("ocr_lots", 0.10)
             }
         elif ocr_file is None:
-            st.info("💡 Please upload a chart image and click 'Run EasyOCR Extraction' to reveal and verify trade parameters.")
+            st.info("💡 Upload a chart image and click 'Run EasyOCR Extraction' to auto-populate price parameters.")
 
     # =========================================================
-    # TAB 3: TRADE METRICS & RISK MATRIX
+    # TAB 3: TRADE METRICS & RISK MATRIX (ALWAYS-ON DOWNLOADS)
     # =========================================================
     with tabs[2]:
         st.subheader("📊 Trade Metrics & Risk Matrix")
         st.caption("Detailed breakdown of position sizing, lot distribution, and risk-to-reward metrics.")
 
-        if "active_order" in st.session_state and st.session_state.active_order["entry"] > 0:
-            order = st.session_state.active_order
-            
-            st.markdown("#### 📐 Calculated Risk-to-Reward (R:R) Ratios")
-            risk_distance = abs(order["entry"] - order["sl"])
+        order = st.session_state.active_order
+        
+        st.markdown("#### 📐 Calculated Risk-to-Reward (R:R) Ratios")
+        risk_distance = abs(order["entry"] - order["sl"])
 
-            col_rr_1, col_rr_2, col_rr_3 = st.columns(3)
+        col_rr_1, col_rr_2, col_rr_3 = st.columns(3)
 
-            if risk_distance > 0:
-                rr1 = abs(order["tp1"] - order["entry"]) / risk_distance if order["tp1"] > 0 else 0.0
-                rr2 = abs(order["tp2"] - order["entry"]) / risk_distance if order["tp2"] > 0 else 0.0
-                rr3 = abs(order["tp3"] - order["entry"]) / risk_distance if order["tp3"] > 0 else 0.0
+        if risk_distance > 0:
+            rr1 = abs(order["tp1"] - order["entry"]) / risk_distance if order["tp1"] > 0 else 0.0
+            rr2 = abs(order["tp2"] - order["entry"]) / risk_distance if order["tp2"] > 0 else 0.0
+            rr3 = abs(order["tp3"] - order["entry"]) / risk_distance if order["tp3"] > 0 else 0.0
 
-                col_rr_1.metric("Target 1 R:R", f"1 : {rr1:.2f}" if rr1 > 0 else "N/A")
-                col_rr_2.metric("Target 2 R:R", f"1 : {rr2:.2f}" if rr2 > 0 else "N/A")
-                col_rr_3.metric("Target 3 R:R", f"1 : {rr3:.2f}" if rr3 > 0 else "N/A")
+            col_rr_1.metric("Target 1 R:R", f"1 : {rr1:.2f}" if rr1 > 0 else "N/A")
+            col_rr_2.metric("Target 2 R:R", f"1 : {rr2:.2f}" if rr2 > 0 else "N/A")
+            col_rr_3.metric("Target 3 R:R", f"1 : {rr3:.2f}" if rr3 > 0 else "N/A")
 
-            st.markdown("---")
-            st.markdown("#### ⚖️ Lot Sizing & Risk Management")
+        st.markdown("---")
+        st.markdown("#### ⚖️ Lot Sizing & Risk Management")
 
-            col_lot_1, col_lot_2 = st.columns(2)
+        col_lot_1, col_lot_2 = st.columns(2)
 
-            with col_lot_1:
-                updated_lots = st.number_input(
-                    "Total Lot Size", 
-                    value=order["lots"], 
-                    format="%.2f", 
-                    step=0.01,
-                    key="metrics_page_lot_input"
-                )
-                st.session_state.active_order["lots"] = updated_lots
+        with col_lot_1:
+            updated_lots = st.number_input(
+                "Total Lot Size", 
+                value=order["lots"], 
+                format="%.2f", 
+                step=0.01,
+                key="metrics_page_lot_input"
+            )
+            st.session_state.active_order["lots"] = updated_lots
 
-            with col_lot_2:
-                risk_pip_distance = risk_distance * 10 if order["entry"] > 500 else (risk_distance * 100 if "JPY" in order["asset"] else risk_distance * 10000)
-                st.metric("Total Risk Exposure", f"{risk_pip_distance:.1f} Points/Pips")
+        with col_lot_2:
+            risk_pip_distance = risk_distance * 10 if order["entry"] > 500 else (risk_distance * 100 if "JPY" in order["asset"] else risk_distance * 10000)
+            st.metric("Total Risk Exposure", f"{risk_pip_distance:.1f} Points/Pips")
 
-            st.markdown("##### 🎯 Multi-Target Position Distribution")
-            col_split_1, col_split_2, col_split_3 = st.columns(3)
-            col_split_1.metric("Target 1 (50% Volume)", f"{updated_lots * 0.5:.2f} Lots")
-            col_split_2.metric("Target 2 (30% Volume)", f"{updated_lots * 0.3:.2f} Lots")
-            col_split_3.metric("Target 3 (20% Volume)", f"{updated_lots * 0.2:.2f} Lots")
+        st.markdown("##### 🎯 Multi-Target Position Distribution")
+        col_split_1, col_split_2, col_split_3 = st.columns(3)
+        col_split_1.metric("Target 1 (50% Volume)", f"{updated_lots * 0.5:.2f} Lots")
+        col_split_2.metric("Target 2 (30% Volume)", f"{updated_lots * 0.3:.2f} Lots")
+        col_split_3.metric("Target 3 (20% Volume)", f"{updated_lots * 0.2:.2f} Lots")
 
-            # =========================================================
-            # CONSOLIDATED DOWNLOAD CENTER
-            # =========================================================
-            st.markdown("---")
-            st.markdown("#### 📥 Export & Download Center")
-            st.caption("Download your trade setup parameters in your preferred file format.")
+        # =========================================================
+        # ALWAYS VISIBLE EXPORT & DOWNLOAD CENTER
+        # =========================================================
+        st.markdown("---")
+        st.markdown("#### 📥 Export & Download Center")
+        st.caption("Download your active trade parameters in JSON, Text, or CSV formats.")
 
-            json_export = json.dumps(order, indent=4)
-            
-            txt_export = f"""========================================
+        json_export = json.dumps(order, indent=4)
+        
+        txt_export = f"""========================================
 SMART MONEY & ICT TRADE SIGNAL BUNDLE
 ========================================
 Asset:        {order['asset']}
@@ -505,39 +513,37 @@ Target 2:     {order['tp2']} (Split: {order['lots']*0.3:.2f} Lots)
 Target 3:     {order['tp3']} (Split: {order['lots']*0.2:.2f} Lots)
 ========================================
 """
-            csv_export = f"Asset,Timeframe,Type,Entry,StopLoss,TP1,TP2,TP3,TotalLots\n{order['asset']},{order['timeframe']},{order['type']},{order['entry']},{order['sl']},{order['tp1']},{order['tp2']},{order['tp3']},{order['lots']}"
+        csv_export = f"Asset,Timeframe,Type,Entry,StopLoss,TP1,TP2,TP3,TotalLots\n{order['asset']},{order['timeframe']},{order['type']},{order['entry']},{order['sl']},{order['tp1']},{order['tp2']},{order['tp3']},{order['lots']}"
 
-            col_dl_1, col_dl_2, col_dl_3 = st.columns(3)
+        col_dl_1, col_dl_2, col_dl_3 = st.columns(3)
 
-            with col_dl_1:
-                st.download_button(
-                    label="💾 JSON Format (.json)",
-                    data=json_export,
-                    file_name=f"{order['asset']}_{order['timeframe']}_Signal.json",
-                    mime="application/json",
-                    use_container_width=True
-                )
+        with col_dl_1:
+            st.download_button(
+                label="💾 Download JSON (.json)",
+                data=json_export,
+                file_name=f"{order['asset']}_{order['timeframe']}_Signal.json",
+                mime="application/json",
+                use_container_width=True,
+                type="primary"
+            )
 
-            with col_dl_2:
-                st.download_button(
-                    label="📄 Text Summary (.txt)",
-                    data=txt_export,
-                    file_name=f"{order['asset']}_{order['timeframe']}_Signal.txt",
-                    mime="text/plain",
-                    use_container_width=True
-                )
+        with col_dl_2:
+            st.download_button(
+                label="📄 Download Summary (.txt)",
+                data=txt_export,
+                file_name=f"{order['asset']}_{order['timeframe']}_Signal.txt",
+                mime="text/plain",
+                use_container_width=True
+            )
 
-            with col_dl_3:
-                st.download_button(
-                    label="📊 CSV Table (.csv)",
-                    data=csv_export,
-                    file_name=f"{order['asset']}_{order['timeframe']}_Signal.csv",
-                    mime="text/csv",
-                    use_container_width=True
-                )
-
-        else:
-            st.info("💡 Complete OCR scanning and order setup in Tab 2 to generate trade metrics and unlock downloads.")
+        with col_dl_3:
+            st.download_button(
+                label="📊 Download CSV (.csv)",
+                data=csv_export,
+                file_name=f"{order['asset']}_{order['timeframe']}_Signal.csv",
+                mime="text/csv",
+                use_container_width=True
+            )
 
     # =========================================================
     # TAB 4: LIVE MT5 EXECUTION BRIDGE
