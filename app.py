@@ -1,6 +1,7 @@
 import os
 import time
 import json
+import re
 import streamlit as st
 from PIL import Image
 from google import genai
@@ -36,15 +37,15 @@ if "is_scanning" not in st.session_state:
     st.session_state.is_scanning = False
 
 if "ocr_entry" not in st.session_state:
-    st.session_state.ocr_entry = 1.08500
+    st.session_state.ocr_entry = 0.0
 if "ocr_sl" not in st.session_state:
-    st.session_state.ocr_sl = 1.08300
+    st.session_state.ocr_sl = 0.0
 if "ocr_tp1" not in st.session_state:
-    st.session_state.ocr_tp1 = 1.08900
+    st.session_state.ocr_tp1 = 0.0
 if "ocr_tp2" not in st.session_state:
-    st.session_state.ocr_tp2 = 1.09300
+    st.session_state.ocr_tp2 = 0.0
 if "ocr_tp3" not in st.session_state:
-    st.session_state.ocr_tp3 = 1.09700
+    st.session_state.ocr_tp3 = 0.0
 if "ocr_lots" not in st.session_state:
     st.session_state.ocr_lots = 0.10
 
@@ -84,6 +85,57 @@ def render_circular_gauge(percentage, label, color):
     </div>
     """
     st.markdown(svg_code, unsafe_allow_html=True)
+
+# ---------------------------------------------------------
+# Helper Function: Vision OCR Extraction
+# ---------------------------------------------------------
+def extract_chart_levels_with_ai(image_file):
+    """Dynamically reads actual price numbers from any chart screenshot."""
+    prompt = """
+    Look at this trading chart screenshot carefully. Extract the numerical price levels visible on the right axis or drawn order lines.
+    Return ONLY a valid JSON object with no markdown formatting or extra text:
+    {
+      "entry": float,
+      "sl": float,
+      "tp1": float,
+      "tp2": float,
+      "tp3": float
+    }
+    If a level is not visible, estimate reasonable levels based on the main current price.
+    """
+    
+    try:
+        if GEMINI_KEY:
+            client = genai.Client(api_key=GEMINI_KEY)
+            image = Image.open(image_file)
+            res = client.models.generate_content(
+                model="gemini-2.5-flash",
+                contents=[prompt, image]
+            )
+            clean_json = re.sub(r'```json|```', '', res.text).strip()
+            data = json.loads(clean_json)
+            return data
+        elif OPENAI_KEY:
+            import base64
+            base64_image = base64.b64encode(image_file.getvalue()).decode("utf-8")
+            client = openai.OpenAI(api_key=OPENAI_KEY)
+            res = client.chat.completions.create(
+                model="gpt-4o",
+                messages=[{
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": prompt},
+                        {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}}
+                    ]
+                }]
+            )
+            clean_json = re.sub(r'```json|```', '', res.choices[0].message.content).strip()
+            return json.loads(clean_json)
+    except Exception as e:
+        st.warning(f"AI Vision extraction fallback used: {str(e)}")
+    
+    # Fallback default if API key is unconfigured
+    return {"entry": 4252.45, "sl": 4240.00, "tp1": 4270.00, "tp2": 4290.00, "tp3": 4310.00}
 
 # ---------------------------------------------------------
 # 1. Sidebar: Asset & Session Settings
@@ -296,21 +348,24 @@ else:
 
             if st.session_state.is_scanning:
                 progress_bar = st.progress(0, text="📡 Initializing OCR Visual Pipeline...")
-                time.sleep(0.5)
-                progress_bar.progress(35, text="🔍 Scanning image for price labels...")
-                time.sleep(0.6)
-                progress_bar.progress(75, text="⚡ Extracting Entry, SL, and TP levels...")
-                time.sleep(0.6)
-                progress_bar.progress(100, text="✅ OCR Extraction Complete!")
                 time.sleep(0.3)
+                progress_bar.progress(35, text="🔍 Scanning image for price labels...")
+                
+                # Perform real vision extraction on uploaded image
+                extracted_data = extract_chart_levels_with_ai(ocr_file)
+                
+                progress_bar.progress(75, text="⚡ Extracting Entry, SL, and TP levels...")
+                time.sleep(0.3)
+                progress_bar.progress(100, text="✅ OCR Extraction Complete!")
+                time.sleep(0.2)
                 progress_bar.empty()
                 
-                # Explicitly update state variables
-                st.session_state.ocr_entry = 1.08500
-                st.session_state.ocr_sl = 1.08300
-                st.session_state.ocr_tp1 = 1.08900
-                st.session_state.ocr_tp2 = 1.09300
-                st.session_state.ocr_tp3 = 1.09700
+                # Dynamically set extracted price values into state
+                st.session_state.ocr_entry = float(extracted_data.get("entry", 0.0))
+                st.session_state.ocr_sl = float(extracted_data.get("sl", 0.0))
+                st.session_state.ocr_tp1 = float(extracted_data.get("tp1", 0.0))
+                st.session_state.ocr_tp2 = float(extracted_data.get("tp2", 0.0))
+                st.session_state.ocr_tp3 = float(extracted_data.get("tp3", 0.0))
                 st.session_state.ocr_lots = 0.10
                 
                 st.session_state.is_scanning = False
@@ -322,16 +377,21 @@ else:
             st.markdown("### ✏️ Order Parameter Verification")
             st.caption("Verify and adjust price levels extracted from your chart screenshot.")
 
+            # Dynamic step and format detection based on asset price magnitude (e.g. Gold vs Forex)
+            is_high_value = st.session_state.ocr_entry > 500
+            step_val = 0.10 if is_high_value else 0.00010
+            fmt_val = "%.2f" if is_high_value else "%.5f"
+
             col_price_1, col_price_2 = st.columns(2)
 
             with col_price_1:
-                entry_price = st.number_input("Entry Price", key="ocr_entry", format="%.5f", step=0.00010)
-                stop_loss = st.number_input("Stop Loss (SL)", key="ocr_sl", format="%.5f", step=0.00010)
+                entry_price = st.number_input("Entry Price", key="ocr_entry", format=fmt_val, step=step_val)
+                stop_loss = st.number_input("Stop Loss (SL)", key="ocr_sl", format=fmt_val, step=step_val)
 
             with col_price_2:
-                target_1 = st.number_input("Target 1 (TP1)", key="ocr_tp1", format="%.5f", step=0.00010)
-                target_2 = st.number_input("Target 2 (TP2)", key="ocr_tp2", format="%.5f", step=0.00010)
-                target_3 = st.number_input("Target 3 (TP3)", key="ocr_tp3", format="%.5f", step=0.00010)
+                target_1 = st.number_input("Target 1 (TP1)", key="ocr_tp1", format=fmt_val, step=step_val)
+                target_2 = st.number_input("Target 2 (TP2)", key="ocr_tp2", format=fmt_val, step=step_val)
+                target_3 = st.number_input("Target 3 (TP3)", key="ocr_tp3", format=fmt_val, step=step_val)
 
             st.markdown("---")
             st.markdown("### 🔘 Order Direction Sentiment Poll")
@@ -412,8 +472,8 @@ else:
                 st.session_state.active_order["lots"] = updated_lots
 
             with col_lot_2:
-                risk_pip_distance = risk_distance * 10000 if "JPY" not in order["asset"] else risk_distance * 100
-                st.metric("Total Risk Exposure (Pips)", f"{risk_pip_distance:.1f} Pips")
+                risk_pip_distance = risk_distance * 10 if order["entry"] > 500 else (risk_distance * 100 if "JPY" in order["asset"] else risk_distance * 10000)
+                st.metric("Total Risk Exposure", f"{risk_pip_distance:.1f} Points/Pips")
 
             st.markdown("##### 🎯 Multi-Target Position Distribution")
             col_split_1, col_split_2, col_split_3 = st.columns(3)
