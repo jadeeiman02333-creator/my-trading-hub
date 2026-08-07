@@ -1,5 +1,4 @@
 import os
-import time
 import json
 import streamlit as st
 from PIL import Image
@@ -8,7 +7,7 @@ from PIL import Image
 # Page Configuration & Styling
 # ---------------------------------------------------------
 st.set_page_config(
-    page_title="NEXUS // Algorithmic Order Flow Terminal",
+    page_title="Killzone // Algorithmic Order Flow Terminal",
     page_icon="⚡",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -25,23 +24,75 @@ try:
 except ImportError:
     openai = None
 
-# Custom Cyberpunk CSS Injection
+# Custom High-Tech Cyberpunk CSS
 st.markdown("""
 <style>
-    @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;800&family=Inter:wght@300;400;600;700&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700;800&family=Inter:wght@300;400;600;700&display=swap');
 
-    html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
-    code, .stCode, div[data-baseweb="input"] input { font-family: 'JetBrains Mono', monospace !important; }
-    .stApp { background-color: #05070A; color: #E2E8F0; }
+    html, body, [class*="css"] {
+        font-family: 'Inter', sans-serif;
+    }
+    
+    code, .stCode, input {
+        font-family: 'JetBrains Mono', monospace !important;
+    }
 
-    .cyber-header {
+    .stApp {
+        background-color: #05070A;
+        color: #E2E8F0;
+    }
+
+    .killzone-title {
         font-family: 'JetBrains Mono', monospace;
-        font-weight: 800;
-        letter-spacing: -0.5px;
-        background: linear-gradient(135deg, #00E676 0%, #00B0FF 100%);
+        font-weight: 900;
+        font-size: 2.2rem;
+        letter-spacing: -1px;
+        background: linear-gradient(135deg, #FF1744 0%, #00E676 100%);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
         text-transform: uppercase;
+        margin: 0;
+    }
+
+    .killzone-subtitle {
+        font-family: 'JetBrains Mono', monospace;
+        color: #64748B;
+        font-size: 0.85rem;
+        letter-spacing: 1px;
+        text-transform: uppercase;
+    }
+
+    .section-header {
+        font-family: 'JetBrains Mono', monospace;
+        font-weight: 700;
+        font-size: 0.95rem;
+        color: #00E676;
+        letter-spacing: 0.5px;
+        text-transform: uppercase;
+        margin-bottom: 12px;
+    }
+
+    .param-box {
+        background: rgba(15, 23, 42, 0.6);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 10px;
+        padding: 10px 14px;
+        margin-bottom: 8px;
+    }
+
+    .param-label {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 0.72rem;
+        color: #94A3B8;
+        font-weight: 700;
+        text-transform: uppercase;
+    }
+
+    .param-value {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 1.2rem;
+        font-weight: 800;
+        color: #FFFFFF;
     }
 
     .status-badge {
@@ -52,8 +103,6 @@ st.markdown("""
         font-size: 11px;
         font-weight: 700;
         font-family: 'JetBrains Mono', monospace;
-    }
-    .status-badge-active {
         background: rgba(0, 230, 118, 0.12);
         color: #00E676;
         border: 1px solid rgba(0, 230, 118, 0.4);
@@ -62,38 +111,36 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ---------------------------------------------------------
-# Session State Initialization
+# Session State Setup
 # ---------------------------------------------------------
 if "settings_submitted" not in st.session_state:
     st.session_state.settings_submitted = False
 if "asset_name" not in st.session_state:
-    st.session_state.asset_name = "XAUUSD"
+    st.session_state.asset_name = ""
 if "timeframe" not in st.session_state:
     st.session_state.timeframe = "M30"
 
 if "ocr_entry" not in st.session_state:
-    st.session_state.ocr_entry = 2450.50
+    st.session_state.ocr_entry = 0.0
 if "ocr_sl" not in st.session_state:
-    st.session_state.ocr_sl = 2442.00
+    st.session_state.ocr_sl = 0.0
 if "ocr_tp1" not in st.session_state:
-    st.session_state.ocr_tp1 = 2465.00
+    st.session_state.ocr_tp1 = 0.0
 if "ocr_tp2" not in st.session_state:
-    st.session_state.ocr_tp2 = 2480.00
+    st.session_state.ocr_tp2 = 0.0
 if "ocr_tp3" not in st.session_state:
-    st.session_state.ocr_tp3 = 2495.00
+    st.session_state.ocr_tp3 = 0.0
 if "ocr_lots" not in st.session_state:
     st.session_state.ocr_lots = 0.50
 
-if "order_direction_vote" not in st.session_state:
-    st.session_state.order_direction_vote = "BUY"
+if "order_bias" not in st.session_state:
+    st.session_state.order_bias = "BUY"
 
-# Secrets / API Keys Extraction
 GEMINI_KEY = st.secrets.get("GEMINI_API_KEY", os.getenv("GEMINI_API_KEY", ""))
 OPENAI_KEY = st.secrets.get("OPENAI_API_KEY", os.getenv("OPENAI_API_KEY", ""))
 
-# Helper Function: Vision Level Extraction
 def extract_chart_levels_with_ai(image_file):
-    prompt = "Analyze this chart screenshot. Extract numerical price levels for Entry, Stop Loss (SL), and Take Profits (TP1, TP2, TP3). Return ONLY raw valid JSON: {\"entry\": float, \"sl\": float, \"tp1\": float, \"tp2\": float, \"tp3\": float}"
+    prompt = "Analyze this chart screenshot. Extract numerical price levels for Entry, Stop Loss (SL), and Take Profits (TP1, TP2, TP3). Return ONLY raw valid JSON: {\"entry\": float, \"sl\": float, \"tp1\": float, \"tp2\": float, \"tp3\": float}. If TP2 or TP3 are not present on the chart, return 0.0 for them."
     try:
         if GEMINI_KEY and genai:
             client = genai.Client(api_key=GEMINI_KEY)
@@ -121,30 +168,67 @@ def extract_chart_levels_with_ai(image_file):
             clean_text = res.choices[0].message.content.replace("```json", "").replace("```", "").strip()
             return json.loads(clean_text)
     except Exception as e:
-        st.warning(f"Vision Engine Fallback Triggered: {str(e)}")
+        st.warning(f"Vision Engine Fallback: {str(e)}")
     
-    return {"entry": 2450.50, "sl": 2442.00, "tp1": 2465.00, "tp2": 2480.00, "tp3": 2495.00}
+    return {"entry": 2450.50, "sl": 2442.00, "tp1": 2465.00, "tp2": 0.0, "tp3": 0.0}
+
+def render_circular_bias_gauge(bias):
+    percentage = 88 if bias == "BUY" else 12
+    label = "BULLISH BIAS" if bias == "BUY" else "BEARISH BIAS"
+    color = "#00E676" if bias == "BUY" else "#FF1744"
+    rotation = 45 if bias == "BUY" else -135
+    
+    radius = 50
+    circumference = 2 * 3.14159 * radius
+    dash_offset = circumference - (percentage / 100.0) * circumference
+
+    svg_code = f"""
+    <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 16px; padding: 20px; margin-top: 10px;">
+        <svg width="150" height="150" viewBox="0 0 120 120">
+            <circle cx="60" cy="60" r="{radius}" stroke="#1E293B" stroke-width="8" fill="none" />
+            <circle cx="60" cy="60" r="{radius}" stroke="{color}" stroke-width="8" fill="none"
+                    stroke-dasharray="{circumference}" stroke-dashoffset="{dash_offset}"
+                    stroke-linecap="round" transform="rotate(-90 60 60)"
+                    style="transition: stroke-dashoffset 0.8s ease-in-out, stroke 0.8s ease-in-out;" />
+            <g transform="rotate({rotation} 60 60)" style="transition: transform 0.8s ease-in-out;">
+                <polygon points="60,20 54,35 66,35" fill="{color}" />
+            </g>
+            <text x="60" y="58" font-family="'JetBrains Mono', monospace" font-size="16" font-weight="800" fill="#FFFFFF" text-anchor="middle" dominant-baseline="central">
+                {bias}
+            </text>
+            <text x="60" y="76" font-family="'Inter', sans-serif" font-size="8" font-weight="700" fill="#94A3B8" text-anchor="middle">
+                ORDER FLOW
+            </text>
+        </svg>
+        <div style="margin-top: 8px; font-family: 'JetBrains Mono', monospace; font-weight: 800; font-size: 13px; color: {color}; text-align: center; letter-spacing: 1px;">
+            {label}
+        </div>
+    </div>
+    """
+    st.markdown(svg_code, unsafe_allow_html=True)
 
 # ---------------------------------------------------------
-# Sidebar Navigation & Control Center
+# Sidebar
 # ---------------------------------------------------------
 with st.sidebar:
-    st.markdown('<h2 class="cyber-header" style="font-size: 1.2rem;">⚡ CONTROL CENTER</h2>', unsafe_allow_html=True)
+    st.markdown('<div class="section-header">⚡ CONTROL CENTER</div>', unsafe_allow_html=True)
     
     if not st.session_state.settings_submitted:
         with st.form(key="asset_settings_form"):
-            asset_input = st.text_input("Active Asset / Instrument", value=st.session_state.asset_name)
+            # Empty value with placeholder so you don't have to delete "EurUsd" every time
+            asset_input = st.text_input("Active Asset / Instrument", value="", placeholder="e.g. EURUSD, XAUUSD")
             timeframe_input = st.selectbox("Execution Timeframe", ["M1", "M5", "M15", "M30", "H1", "H4", "D1"], index=3)
-            submit_button = st.form_submit_button(label="LAUNCH TERMINAL SESSION", type="primary")
+            submit_button = st.form_submit_button(label="LAUNCH SESSION", type="primary", use_container_width=True)
             
             if submit_button:
-                st.session_state.asset_name = asset_input
+                st.session_state.asset_name = asset_input.strip() if asset_input.strip() else "EURUSD"
                 st.session_state.timeframe = timeframe_input
                 st.session_state.settings_submitted = True
                 st.rerun()
     else:
-        st.success(f"ACTIVE: {st.session_state.asset_name} [{st.session_state.timeframe}]")
-        if st.button("🔄 Change Session"):
+        st.markdown(f"**ACTIVE:** `{st.session_state.asset_name}` [{st.session_state.timeframe}]")
+        st.write("")
+        if st.button("🔄 Change Session", use_container_width=True):
             st.session_state.settings_submitted = False
             st.rerun()
 
@@ -152,84 +236,129 @@ with st.sidebar:
 # Main Execution Workspace
 # ---------------------------------------------------------
 if not st.session_state.settings_submitted:
-    st.markdown('<h1 class="cyber-header" style="text-align: center; margin-top: 50px;">NEXUS TERMINAL v3.0</h1>', unsafe_allow_html=True)
-    st.info("👈 Enter your active instrument details in the sidebar control center and click 'LAUNCH TERMINAL SESSION' to start.")
+    st.markdown("""
+    <div style="text-align: center; padding: 60px 20px;">
+        <div class="killzone-title">KILLZONE</div>
+        <div class="killzone-subtitle" style="margin-top: 10px;">Algorithmic Order Flow & Vision Engine</div>
+        <div style="margin-top: 30px; font-family: 'JetBrains Mono', monospace; font-size: 0.85rem; color: #00E676;">
+            👈 CONFIGURE YOUR PAIR IN THE CONTROL CENTER TO BEGIN
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
 else:
+    # Header Banner
     st.markdown(f"""
-    <div style="display: flex; justify-content: space-between; align-items: center; padding-bottom: 15px; margin-bottom: 20px; border-bottom: 1px solid rgba(255,255,255,0.08);">
+    <div style="display: flex; justify-content: space-between; align-items: center; padding-bottom: 12px; margin-bottom: 20px; border-bottom: 1px solid rgba(255,255,255,0.08);">
         <div>
-            <h1 class="cyber-header" style="margin: 0; font-size: 1.8rem;">NEXUS // {st.session_state.asset_name}</h1>
-            <span style="color: #94A3B8; font-size: 12px; font-family: 'JetBrains Mono', monospace;">TIMEFRAME: {st.session_state.timeframe} | ENGINE: VISION OCR v3.0</span>
+            <div class="killzone-title">KILLZONE</div>
+            <div class="killzone-subtitle">{st.session_state.asset_name} // {st.session_state.timeframe} FRAME</div>
         </div>
         <div>
-            <span class="status-badge status-badge-active">● ENGINE ONLINE</span>
+            <span class="status-badge">● ONLINE</span>
         </div>
     </div>
     """, unsafe_allow_html=True)
 
     tabs = st.tabs([
         "📸 01. VISION SCAN & ORDER BUILDER",
-        "📊 02. RISK MATRIX & EXPORT CENTER",
-        "⚡ 03. MT5 EXECUTION BRIDGE"
+        "📊 02. RISK MATRIX",
+        "⚡ 03. MT5 BRIDGE"
     ])
 
+    # =========================================================
+    # TAB 1: VISION SCAN & ORDER BUILDER
+    # =========================================================
     with tabs[0]:
         col_scan_left, col_scan_right = st.columns([1.1, 1], gap="large")
 
         with col_scan_left:
-            st.markdown('<h3 class="cyber-header" style="font-size: 1rem;">1. CHART SCREENSHOT INGESTION</h3>', unsafe_allow_html=True)
+            st.markdown('<div class="section-header">1. CHART SCREENSHOT INGESTION</div>', unsafe_allow_html=True)
             ocr_file = st.file_uploader("Upload MT5 / TradingView Chart", type=["png", "jpg", "jpeg"], key="ocr_uploader")
 
             if ocr_file is not None:
                 st.image(Image.open(ocr_file), use_container_width=True)
 
-                if st.button("⚡ EXECUTE VISION OCR EXTRACTION", type="primary", use_container_width=True):
-                    with st.spinner("Extracting chart levels..."):
+                if st.button("⚡ EXECUTE VISION EXTRACTION", type="primary", use_container_width=True):
+                    with st.spinner("Analyzing chart levels..."):
                         extracted_data = extract_chart_levels_with_ai(ocr_file)
-                        st.session_state.ocr_entry = float(extracted_data.get("entry", 2450.50))
-                        st.session_state.ocr_sl = float(extracted_data.get("sl", 2442.00))
-                        st.session_state.ocr_tp1 = float(extracted_data.get("tp1", 2465.00))
-                        st.session_state.ocr_tp2 = float(extracted_data.get("tp2", 2480.00))
-                        st.session_state.ocr_tp3 = float(extracted_data.get("tp3", 2495.00))
+                        st.session_state.ocr_entry = float(extracted_data.get("entry", 0.0))
+                        st.session_state.ocr_sl = float(extracted_data.get("sl", 0.0))
+                        st.session_state.ocr_tp1 = float(extracted_data.get("tp1", 0.0))
+                        st.session_state.ocr_tp2 = float(extracted_data.get("tp2", 0.0))
+                        st.session_state.ocr_tp3 = float(extracted_data.get("tp3", 0.0))
                         st.rerun()
 
         with col_scan_right:
-            st.markdown('<h3 class="cyber-header" style="font-size: 1rem;">2. PARAMETER VERIFICATION</h3>', unsafe_allow_html=True)
+            # STRICT REQUIREMENT: Only appear once image is uploaded
+            if ocr_file is not None:
+                st.markdown('<div class="section-header">2. PARAMETER VERIFICATION</div>', unsafe_allow_html=True)
 
-            is_high_value = st.session_state.ocr_entry > 500
-            step_val = 0.10 if is_high_value else 0.00010
-            fmt_val = "%.2f" if is_high_value else "%.5f"
+                def render_copyable_card(label, val_float, color_hex="#FFFFFF"):
+                    if val_float <= 0:
+                        return
+                    fmt_str = f"{val_float:.2f}" if val_float > 500 else f"{val_float:.5f}"
+                    
+                    c_card, c_btn = st.columns([3, 1])
+                    with c_card:
+                        st.markdown(f"""
+                        <div class="param-box">
+                            <div class="param-label">{label}</div>
+                            <div class="param-value" style="color: {color_hex};">{fmt_str}</div>
+                        </div>
+                        """, unsafe_allow_html=True)
+                    with c_btn:
+                        st.write("")
+                        st.code(fmt_str, language=None)
 
-            col_p1, col_p2 = st.columns(2)
-            with col_p1:
-                entry_price = st.number_input("ENTRY PRICE", key="ocr_entry", format=fmt_val, step=step_val)
-                stop_loss = st.number_input("STOP LOSS (SL)", key="ocr_sl", format=fmt_val, step=step_val)
+                # Render Entry, SL, and TP1
+                render_copyable_card("ENTRY PRICE", st.session_state.ocr_entry, "#00B0FF")
+                render_copyable_card("STOP LOSS (SL)", st.session_state.ocr_sl, "#FF1744")
+                render_copyable_card("TARGET 1 (TP1)", st.session_state.ocr_tp1, "#00E676")
 
-            with col_p2:
-                target_1 = st.number_input("TARGET 1 (TP1)", key="ocr_tp1", format=fmt_val, step=step_val)
-                target_2 = st.number_input("TARGET 2 (TP2)", key="ocr_tp2", format=fmt_val, step=step_val)
-                target_3 = st.number_input("TARGET 3 (TP3)", key="ocr_tp3", format=fmt_val, step=step_val)
+                # ONLY show TP2 / TP3 if there is a valid take profit level
+                if st.session_state.ocr_tp2 > 0:
+                    render_copyable_card("TARGET 2 (TP2)", st.session_state.ocr_tp2, "#00E676")
 
-            st.markdown("---")
-            direction_choice = st.radio("Order Direction Bias:", options=["BUY 🟢", "SELL 🔴"], horizontal=True)
+                if st.session_state.ocr_tp3 > 0:
+                    render_copyable_card("TARGET 3 (TP3)", st.session_state.ocr_tp3, "#00E676")
 
-            st.session_state.active_order = {
-                "asset": st.session_state.asset_name,
-                "timeframe": st.session_state.timeframe,
-                "type": "BUY" if "BUY" in direction_choice else "SELL",
-                "entry": entry_price,
-                "sl": stop_loss,
-                "tp1": target_1,
-                "tp2": target_2,
-                "tp3": target_3,
-                "lots": st.session_state.get("ocr_lots", 0.50)
-            }
+                st.markdown("---")
+                st.markdown('<div class="section-header">ORDER DIRECTION BIAS</div>', unsafe_allow_html=True)
 
+                col_bias1, col_bias2 = st.columns(2)
+                with col_bias1:
+                    if st.button("🟢 BUY BIAS", use_container_width=True, type="primary" if st.session_state.order_bias == "BUY" else "secondary"):
+                        st.session_state.order_bias = "BUY"
+                        st.rerun()
+                with col_bias2:
+                    if st.button("🔴 SELL BIAS", use_container_width=True, type="primary" if st.session_state.order_bias == "SELL" else "secondary"):
+                        st.session_state.order_bias = "SELL"
+                        st.rerun()
+
+                render_circular_bias_gauge(st.session_state.order_bias)
+
+                st.session_state.active_order = {
+                    "asset": st.session_state.asset_name,
+                    "timeframe": st.session_state.timeframe,
+                    "type": st.session_state.order_bias,
+                    "entry": st.session_state.ocr_entry,
+                    "sl": st.session_state.ocr_sl,
+                    "tp1": st.session_state.ocr_tp1,
+                    "tp2": st.session_state.ocr_tp2,
+                    "tp3": st.session_state.ocr_tp3,
+                    "lots": st.session_state.get("ocr_lots", 0.50)
+                }
+            else:
+                st.info("💡 Upload a chart screenshot on the left to reveal parameter verification.")
+
+    # =========================================================
+    # TAB 2: RISK MATRIX
+    # =========================================================
     with tabs[1]:
         order = st.session_state.get("active_order", {
             "asset": st.session_state.asset_name,
             "timeframe": st.session_state.timeframe,
-            "type": "BUY",
+            "type": st.session_state.order_bias,
             "entry": st.session_state.ocr_entry,
             "sl": st.session_state.ocr_sl,
             "tp1": st.session_state.ocr_tp1,
@@ -238,12 +367,12 @@ else:
             "lots": st.session_state.ocr_lots
         })
 
-        st.markdown('<h3 class="cyber-header" style="font-size: 1.1rem;">LOT SIZE & EXPOSURE</h3>', unsafe_allow_html=True)
-        updated_lots = st.number_input("Total Aggregate Lot Size", value=order["lots"], format="%.2f", step=0.01, key="risk_matrix_lot_input")
+        st.markdown('<div class="section-header">LOT SIZE & EXPOSURE</div>', unsafe_allow_html=True)
+        updated_lots = st.number_input("Aggregate Lots", value=order["lots"], format="%.2f", step=0.01, key="risk_matrix_lot_input")
         order["lots"] = updated_lots
 
         st.markdown("---")
-        st.markdown('<h3 class="cyber-header" style="font-size: 1.1rem;">📥 EXPORT CENTER</h3>', unsafe_allow_html=True)
+        st.markdown('<div class="section-header">📥 EXPORT BUNDLE</div>', unsafe_allow_html=True)
 
         json_export = json.dumps(order, indent=4)
         txt_export = f"Asset: {order['asset']}\nEntry: {order['entry']}\nSL: {order['sl']}\nTP1: {order['tp1']}\nTP2: {order['tp2']}\nTP3: {order['tp3']}\nLots: {order['lots']}"
@@ -257,8 +386,11 @@ else:
         with col_d3:
             st.download_button("📊 DOWNLOAD CSV", data=csv_export, file_name=f"{order['asset']}_order.csv", mime="text/csv", use_container_width=True)
 
+    # =========================================================
+    # TAB 3: MT5 BRIDGE
+    # =========================================================
     with tabs[2]:
-        st.markdown('<h3 class="cyber-header" style="font-size: 1.1rem;">⚡ LIVE MT5 TERMINAL DISPATCH</h3>', unsafe_allow_html=True)
+        st.markdown('<div class="section-header">⚡ MT5 SIGNAL DISPATCH</div>', unsafe_allow_html=True)
         order = st.session_state.get("active_order", {})
         st.json(order)
         if st.button("🔥 DISPATCH TO MT5", type="primary", use_container_width=True):
