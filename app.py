@@ -2,7 +2,6 @@ import os
 import json
 import re
 import io
-import base64
 import streamlit as st
 from PIL import Image
 
@@ -16,25 +15,11 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Multi-SDK Safe Imports
-genai_new = None
-genai_legacy = None
-openai_mod = None
-
+# Modern Google Gen AI SDK
 try:
-    from google import genai as genai_new
+    from google import genai
 except ImportError:
-    pass
-
-try:
-    import google.generativeai as genai_legacy
-except ImportError:
-    pass
-
-try:
-    import openai as openai_mod
-except ImportError:
-    pass
+    genai = None
 
 st.markdown("""
 <style>
@@ -145,9 +130,7 @@ if "trade_rationale" not in st.session_state:
 if "order_bias" not in st.session_state:
     st.session_state.order_bias = "INVALID"
 
-# Streamlit secrets lookup
-GEMINI_KEY = st.secrets.get("GEMINI_API_KEY", os.getenv("GEMINI_API_KEY", st.secrets.get("GOOGLE_API_KEY", "")))
-OPENAI_KEY = st.secrets.get("OPENAI_API_KEY", os.getenv("OPENAI_API_KEY", ""))
+GEMINI_KEY = st.secrets.get("GEMINI_API_KEY", os.getenv("GEMINI_API_KEY", ""))
 
 def format_price(val):
     try:
@@ -167,7 +150,7 @@ Analyze the price action in this image:
 2. DIRECTIONAL BIAS: Determine if the valid trade setup is 'BUY', 'SELL', or 'NO_TRADE'.
 3. PRICE LEVELS: Extract or detect precise numeric figures for Entry, Stop Loss (SL), Take Profit 1 (TP1), Take Profit 2 (TP2), and Take Profit 3 (TP3).
 4. CONFLUENCE SCORE: Rate setup quality from 1.0 to 10.0 based on structural clarity.
-5. RATIONALE: Write a concise 2-sentence technical breakdown.
+5. RATIONALE: Write a concise 2-sentence technical breakdown explaining the trade setup.
 
 Return ONLY raw valid JSON in this exact structure:
 {{
@@ -182,72 +165,36 @@ Return ONLY raw valid JSON in this exact structure:
 }}
 """
 
-    if not GEMINI_KEY and not OPENAI_KEY:
-        return {"error": "No API Keys detected in Streamlit Cloud Secrets. Ensure GEMINI_API_KEY or OPENAI_API_KEY is saved."}
+    if not GEMINI_KEY:
+        return {"error": "GEMINI_API_KEY missing in Streamlit Secrets. Go to App Settings -> Secrets to add it."}
 
-    last_error = ""
+    if not genai:
+        return {"error": "'google-genai' package is not installed. Ensure 'google-genai' is listed in requirements.txt."}
 
-    # Strategy 1: New Google Gen AI SDK
-    if GEMINI_KEY and genai_new:
-        try:
-            client = genai_new.Client(api_key=GEMINI_KEY)
-            for model_name in ["gemini-2.5-flash", "gemini-1.5-flash", "gemini-2.0-flash"]:
-                try:
-                    res = client.models.generate_content(
-                        model=model_name,
-                        contents=[prompt, pil_image]
-                    )
-                    raw_text = res.text.strip()
-                    clean_text = re.sub(r'```(?:json)?', '', raw_text).replace('```', '').strip()
-                    return json.loads(clean_text)
-                except Exception as m_e:
-                    last_error = f"Google GenAI ({model_name}): {str(m_e)}"
-                    continue
-        except Exception as e:
-            last_error = f"Google GenAI Client setup error: {str(e)}"
+    try:
+        client = genai.Client(api_key=GEMINI_KEY)
+        
+        # Priority list of Gemini models
+        candidate_models = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"]
+        last_exception = ""
 
-    # Strategy 2: Legacy Google Generative AI SDK
-    if GEMINI_KEY and genai_legacy:
-        try:
-            genai_legacy.configure(api_key=GEMINI_KEY)
-            for model_name in ["gemini-1.5-flash", "gemini-1.5-pro"]:
-                try:
-                    model = genai_legacy.GenerativeModel(model_name)
-                    res = model.generate_content([prompt, pil_image])
-                    raw_text = res.text.strip()
-                    clean_text = re.sub(r'```(?:json)?', '', raw_text).replace('```', '').strip()
-                    return json.loads(clean_text)
-                except Exception as m_e:
-                    last_error = f"Legacy Gemini ({model_name}): {str(m_e)}"
-                    continue
-        except Exception as e:
-            last_error = f"Legacy Gemini setup error: {str(e)}"
+        for model_name in candidate_models:
+            try:
+                res = client.models.generate_content(
+                    model=model_name,
+                    contents=[prompt, pil_image]
+                )
+                raw_text = res.text.strip()
+                clean_text = re.sub(r'```(?:json)?', '', raw_text).replace('```', '').strip()
+                return json.loads(clean_text)
+            except Exception as e:
+                last_exception = f"[{model_name}]: {str(e)}"
+                continue
 
-    # Strategy 3: OpenAI SDK
-    if OPENAI_KEY and openai_mod:
-        try:
-            buffered = io.BytesIO()
-            pil_image.save(buffered, format="PNG")
-            img_b64 = base64.b64encode(buffered.getvalue()).decode("utf-8")
+        return {"error": f"All Gemini models failed. Last error: {last_exception}"}
 
-            client = openai_mod.OpenAI(api_key=OPENAI_KEY)
-            res = client.chat.completions.create(
-                model="gpt-4o",
-                messages=[{
-                    "role": "user",
-                    "content": [
-                        {"type": "text", "text": prompt},
-                        {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{img_b64}"}}
-                    ]
-                }]
-            )
-            raw_text = res.choices[0].message.content.strip()
-            clean_text = re.sub(r'```(?:json)?', '', raw_text).replace('```', '').strip()
-            return json.loads(clean_text)
-        except Exception as e:
-            last_error = f"OpenAI Error: {str(e)}"
-
-    return {"error": f"API Call Failed. Reason: {last_error}"}
+    except Exception as e:
+        return {"error": f"Gemini Initialization Error: {str(e)}"}
 
 def render_circular_bias_gauge(bias):
     if bias == "BUY":
@@ -370,7 +317,6 @@ else:
             )
 
             if ocr_file is not None:
-                # Load PIL image safely in memory
                 pil_img = Image.open(ocr_file)
                 st.image(pil_img, use_container_width=True)
 
