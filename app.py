@@ -1,13 +1,14 @@
 import os
 import json
+import re
 import streamlit as st
 from PIL import Image
 
 # ---------------------------------------------------------
-# Page Configuration & High-Tech Theme
+# Page Configuration & High-Tech Styling
 # ---------------------------------------------------------
 st.set_page_config(
-    page_title="Killzone // Algorithmic Order Flow Terminal",
+    page_title="Killzone // Algorithmic Terminal",
     page_icon="⚡",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -146,16 +147,16 @@ def format_price(val):
 
 def analyze_chart_with_ai(image_file, asset, timeframe):
     prompt = f"""
-You are an expert ICT (Inner Circle Trader) and Smart Money Concepts (SMC) quantitative trading analyst examining a {asset} {timeframe} chart.
-Perform a complete technical analysis of price action and market structure in this image:
+You are an expert ICT (Inner Circle Trader) and Smart Money Concepts (SMC) analyst reviewing a {asset} {timeframe} chart.
+Analyze the price action in the image:
 
-1. MARKET STRUCTURE: Scan for Market Structure Shifts (MSS/CHoCH), Breaks of Structure (BOS), Fair Value Gaps (FVG), Order Blocks (OB), or Liquidity Sweeps.
-2. DIRECTIONAL BIAS: Determine if the setup is 'BUY', 'SELL', or 'NO_TRADE' (if structure is ambiguous/low probability).
-3. PRICE LEVELS: Extract or identify the optimal price points for Entry, Stop Loss (SL), Take Profit 1 (TP1), Take Profit 2 (TP2), and Take Profit 3 (TP3).
-4. CONFLUENCE SCORE: Rate the setup quality from 1.0 to 10.0 based on structural clarity.
-5. RATIONALE: Write a concise 2-sentence technical breakdown explaining the confluence.
+1. MARKET STRUCTURE: Look for Market Structure Shifts (MSS), Breaks of Structure (BOS), Fair Value Gaps (FVG), Order Blocks (OB), or Liquidity Sweeps.
+2. DIRECTIONAL BIAS: Determine if the valid trade is 'BUY', 'SELL', or 'NO_TRADE'.
+3. PRICE LEVELS: Extract precise numerical values for Entry, Stop Loss (SL), Take Profit 1 (TP1), Take Profit 2 (TP2), and Take Profit 3 (TP3).
+4. CONFLUENCE SCORE: Rate the setup quality from 1.0 to 10.0.
+5. RATIONALE: Provide a 2-sentence technical breakdown explaining the setup.
 
-Return ONLY raw valid JSON matching this exact structure:
+Return ONLY raw JSON in this structure:
 {{
   "bias": "BUY" | "SELL" | "NO_TRADE",
   "score": float,
@@ -169,7 +170,11 @@ Return ONLY raw valid JSON matching this exact structure:
 """
 
     if not GEMINI_KEY and not OPENAI_KEY:
-        st.error("🚨 API Key Missing! Add GEMINI_API_KEY or OPENAI_API_KEY in Streamlit Secrets.")
+        st.error("🚨 SECRETS MISSING: Add 'GEMINI_API_KEY' in Streamlit Cloud Secrets (App Settings -> Secrets).")
+        return None
+
+    if GEMINI_KEY and not genai:
+        st.error("🚨 PACKAGE MISSING: 'google-genai' is not installed. Add 'google-genai' to requirements.txt.")
         return None
 
     try:
@@ -180,7 +185,8 @@ Return ONLY raw valid JSON matching this exact structure:
                 model="gemini-2.5-flash",
                 contents=[prompt, image]
             )
-            clean_text = res.text.replace("```json", "").replace("```", "").strip()
+            raw_text = res.text.strip()
+            clean_text = re.sub(r'```(?:json)?', '', raw_text).replace('```', '').strip()
             return json.loads(clean_text)
         elif OPENAI_KEY and openai:
             import base64
@@ -196,10 +202,11 @@ Return ONLY raw valid JSON matching this exact structure:
                     ]
                 }]
             )
-            clean_text = res.choices[0].message.content.replace("```json", "").replace("```", "").strip()
+            raw_text = res.choices[0].message.content.strip()
+            clean_text = re.sub(r'```(?:json)?', '', raw_text).replace('```', '').strip()
             return json.loads(clean_text)
     except Exception as e:
-        st.error(f"Error during AI Chart Analysis: {str(e)}")
+        st.error(f"🚨 API Execution Error: {str(e)}")
 
     return None
 
@@ -336,7 +343,7 @@ else:
                             st.session_state.ocr_tp2 = format_price(analysis.get("tp2", 0.0))
                             st.session_state.ocr_tp3 = format_price(analysis.get("tp3", 0.0))
                             st.session_state.trade_score = float(analysis.get("score", 0.0))
-                            st.session_state.trade_rationale = str(analysis.get("rationale", "No analysis rationale provided."))
+                            st.session_state.trade_rationale = str(analysis.get("rationale", "Analysis completed."))
 
                             ai_bias = str(analysis.get("bias", "NO_TRADE")).upper()
                             if ai_bias in ["BUY", "SELL"]:
@@ -350,7 +357,7 @@ else:
                             st.session_state.ocr_tp2 = "0.00000"
                             st.session_state.ocr_tp3 = "0.00000"
                             st.session_state.trade_score = 0.0
-                            st.session_state.trade_rationale = "Failed to analyze chart structure."
+                            st.session_state.trade_rationale = "Failed to analyze chart structure. Check secrets or API key configuration."
                             st.session_state.order_bias = "INVALID"
 
                         st.session_state.extraction_performed = True
@@ -358,10 +365,8 @@ else:
 
         with col_scan_right:
             if ocr_file is not None and st.session_state.extraction_performed:
-                # --- AI ANALYSIS RATIONALE & METRICS ---
                 st.markdown('<div class="section-header">ICT ANALYSIS & CONFLUENCE</div>', unsafe_allow_html=True)
 
-                # Compute Risk Reward Ratio dynamically
                 try:
                     e_num = float(st.session_state.ocr_entry)
                     sl_num = float(st.session_state.ocr_sl)
