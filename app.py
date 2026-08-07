@@ -1,6 +1,8 @@
 import os
 import json
 import re
+import io
+import base64
 import streamlit as st
 from PIL import Image
 
@@ -14,15 +16,25 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-try:
-    from google import genai
-except ImportError:
-    genai = None
+# Multi-SDK Safe Imports
+genai_new = None
+genai_legacy = None
+openai_mod = None
 
 try:
-    import openai
+    from google import genai as genai_new
 except ImportError:
-    openai = None
+    pass
+
+try:
+    import google.generativeai as genai_legacy
+except ImportError:
+    pass
+
+try:
+    import openai as openai_mod
+except ImportError:
+    pass
 
 st.markdown("""
 <style>
@@ -133,7 +145,8 @@ if "trade_rationale" not in st.session_state:
 if "order_bias" not in st.session_state:
     st.session_state.order_bias = "INVALID"
 
-GEMINI_KEY = st.secrets.get("GEMINI_API_KEY", os.getenv("GEMINI_API_KEY", ""))
+# Streamlit secrets lookup
+GEMINI_KEY = st.secrets.get("GEMINI_API_KEY", os.getenv("GEMINI_API_KEY", st.secrets.get("GOOGLE_API_KEY", "")))
 OPENAI_KEY = st.secrets.get("OPENAI_API_KEY", os.getenv("OPENAI_API_KEY", ""))
 
 def format_price(val):
@@ -145,18 +158,18 @@ def format_price(val):
     except (ValueError, TypeError):
         return "0.00000"
 
-def analyze_chart_with_ai(image_file, asset, timeframe):
+def analyze_chart_with_ai(pil_image, asset, timeframe):
     prompt = f"""
-You are an expert ICT (Inner Circle Trader) and Smart Money Concepts (SMC) analyst reviewing a {asset} {timeframe} chart.
-Analyze the price action in the image:
+You are an expert ICT (Inner Circle Trader) and Smart Money Concepts (SMC) quantitative analyst examining a {asset} {timeframe} chart.
+Analyze the price action in this image:
 
 1. MARKET STRUCTURE: Look for Market Structure Shifts (MSS), Breaks of Structure (BOS), Fair Value Gaps (FVG), Order Blocks (OB), or Liquidity Sweeps.
-2. DIRECTIONAL BIAS: Determine if the valid trade is 'BUY', 'SELL', or 'NO_TRADE'.
-3. PRICE LEVELS: Extract precise numerical values for Entry, Stop Loss (SL), Take Profit 1 (TP1), Take Profit 2 (TP2), and Take Profit 3 (TP3).
-4. CONFLUENCE SCORE: Rate the setup quality from 1.0 to 10.0.
-5. RATIONALE: Provide a 2-sentence technical breakdown explaining the setup.
+2. DIRECTIONAL BIAS: Determine if the valid trade setup is 'BUY', 'SELL', or 'NO_TRADE'.
+3. PRICE LEVELS: Extract or detect precise numeric figures for Entry, Stop Loss (SL), Take Profit 1 (TP1), Take Profit 2 (TP2), and Take Profit 3 (TP3).
+4. CONFLUENCE SCORE: Rate setup quality from 1.0 to 10.0 based on structural clarity.
+5. RATIONALE: Write a concise 2-sentence technical breakdown.
 
-Return ONLY raw JSON in this structure:
+Return ONLY raw valid JSON in this exact structure:
 {{
   "bias": "BUY" | "SELL" | "NO_TRADE",
   "score": float,
@@ -170,45 +183,71 @@ Return ONLY raw JSON in this structure:
 """
 
     if not GEMINI_KEY and not OPENAI_KEY:
-        st.error("🚨 SECRETS MISSING: Add 'GEMINI_API_KEY' in Streamlit Cloud Secrets (App Settings -> Secrets).")
-        return None
+        return {"error": "No API Keys detected in Streamlit Cloud Secrets. Ensure GEMINI_API_KEY or OPENAI_API_KEY is saved."}
 
-    if GEMINI_KEY and not genai:
-        st.error("🚨 PACKAGE MISSING: 'google-genai' is not installed. Add 'google-genai' to requirements.txt.")
-        return None
+    last_error = ""
 
-    try:
-        if GEMINI_KEY and genai:
-            client = genai.Client(api_key=GEMINI_KEY)
-            image = Image.open(image_file)
-            res = client.models.generate_content(
-                model="gemini-2.5-flash",
-                contents=[prompt, image]
-            )
-            raw_text = res.text.strip()
-            clean_text = re.sub(r'```(?:json)?', '', raw_text).replace('```', '').strip()
-            return json.loads(clean_text)
-        elif OPENAI_KEY and openai:
-            import base64
-            base64_image = base64.b64encode(image_file.getvalue()).decode("utf-8")
-            client = openai.OpenAI(api_key=OPENAI_KEY)
+    # Strategy 1: New Google Gen AI SDK
+    if GEMINI_KEY and genai_new:
+        try:
+            client = genai_new.Client(api_key=GEMINI_KEY)
+            for model_name in ["gemini-2.5-flash", "gemini-1.5-flash", "gemini-2.0-flash"]:
+                try:
+                    res = client.models.generate_content(
+                        model=model_name,
+                        contents=[prompt, pil_image]
+                    )
+                    raw_text = res.text.strip()
+                    clean_text = re.sub(r'```(?:json)?', '', raw_text).replace('```', '').strip()
+                    return json.loads(clean_text)
+                except Exception as m_e:
+                    last_error = f"Google GenAI ({model_name}): {str(m_e)}"
+                    continue
+        except Exception as e:
+            last_error = f"Google GenAI Client setup error: {str(e)}"
+
+    # Strategy 2: Legacy Google Generative AI SDK
+    if GEMINI_KEY and genai_legacy:
+        try:
+            genai_legacy.configure(api_key=GEMINI_KEY)
+            for model_name in ["gemini-1.5-flash", "gemini-1.5-pro"]:
+                try:
+                    model = genai_legacy.GenerativeModel(model_name)
+                    res = model.generate_content([prompt, pil_image])
+                    raw_text = res.text.strip()
+                    clean_text = re.sub(r'```(?:json)?', '', raw_text).replace('```', '').strip()
+                    return json.loads(clean_text)
+                except Exception as m_e:
+                    last_error = f"Legacy Gemini ({model_name}): {str(m_e)}"
+                    continue
+        except Exception as e:
+            last_error = f"Legacy Gemini setup error: {str(e)}"
+
+    # Strategy 3: OpenAI SDK
+    if OPENAI_KEY and openai_mod:
+        try:
+            buffered = io.BytesIO()
+            pil_image.save(buffered, format="PNG")
+            img_b64 = base64.b64encode(buffered.getvalue()).decode("utf-8")
+
+            client = openai_mod.OpenAI(api_key=OPENAI_KEY)
             res = client.chat.completions.create(
                 model="gpt-4o",
                 messages=[{
                     "role": "user",
                     "content": [
                         {"type": "text", "text": prompt},
-                        {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}}
+                        {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{img_b64}"}}
                     ]
                 }]
             )
             raw_text = res.choices[0].message.content.strip()
             clean_text = re.sub(r'```(?:json)?', '', raw_text).replace('```', '').strip()
             return json.loads(clean_text)
-    except Exception as e:
-        st.error(f"🚨 API Execution Error: {str(e)}")
+        except Exception as e:
+            last_error = f"OpenAI Error: {str(e)}"
 
-    return None
+    return {"error": f"API Call Failed. Reason: {last_error}"}
 
 def render_circular_bias_gauge(bias):
     if bias == "BUY":
@@ -331,12 +370,15 @@ else:
             )
 
             if ocr_file is not None:
-                st.image(Image.open(ocr_file), use_container_width=True)
+                # Load PIL image safely in memory
+                pil_img = Image.open(ocr_file)
+                st.image(pil_img, use_container_width=True)
 
                 if st.button("⚡ EXECUTE VISION EXTRACTION", type="primary", use_container_width=True):
                     with st.spinner("Analyzing market structure & ICT order flow..."):
-                        analysis = analyze_chart_with_ai(ocr_file, st.session_state.asset_name, st.session_state.timeframe)
-                        if analysis:
+                        analysis = analyze_chart_with_ai(pil_img, st.session_state.asset_name, st.session_state.timeframe)
+                        
+                        if analysis and "error" not in analysis:
                             st.session_state.ocr_entry = format_price(analysis.get("entry", 0.0))
                             st.session_state.ocr_sl = format_price(analysis.get("sl", 0.0))
                             st.session_state.ocr_tp1 = format_price(analysis.get("tp1", 0.0))
@@ -351,13 +393,14 @@ else:
                             else:
                                 st.session_state.order_bias = "INVALID"
                         else:
+                            error_msg = analysis.get("error", "Unknown error") if analysis else "No response from AI."
                             st.session_state.ocr_entry = "0.00000"
                             st.session_state.ocr_sl = "0.00000"
                             st.session_state.ocr_tp1 = "0.00000"
                             st.session_state.ocr_tp2 = "0.00000"
                             st.session_state.ocr_tp3 = "0.00000"
                             st.session_state.trade_score = 0.0
-                            st.session_state.trade_rationale = "Failed to analyze chart structure. Check secrets or API key configuration."
+                            st.session_state.trade_rationale = f"🚨 {error_msg}"
                             st.session_state.order_bias = "INVALID"
 
                         st.session_state.extraction_performed = True
