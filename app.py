@@ -4,10 +4,10 @@ import streamlit as st
 from PIL import Image
 
 # ---------------------------------------------------------
-# Page Configuration & Cyberpunk Theme
+# Page Configuration & High-Tech Theme
 # ---------------------------------------------------------
 st.set_page_config(
-    page_title="Killzone // Algorithmic Terminal",
+    page_title="Killzone // Algorithmic Order Flow Terminal",
     page_icon="⚡",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -61,6 +61,31 @@ st.markdown("""
         margin-bottom: 12px;
     }
 
+    .analysis-card {
+        background: rgba(15, 23, 42, 0.7);
+        border: 1px solid rgba(0, 230, 118, 0.25);
+        border-radius: 12px;
+        padding: 16px;
+        margin-bottom: 16px;
+    }
+
+    .rationale-text {
+        font-family: 'Inter', sans-serif;
+        font-size: 0.9rem;
+        color: #CBD5E1;
+        line-height: 1.5;
+    }
+
+    .stat-badge {
+        display: inline-block;
+        padding: 4px 10px;
+        border-radius: 6px;
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 0.8rem;
+        font-weight: 700;
+        margin-right: 8px;
+    }
+
     .status-badge {
         display: inline-flex;
         align-items: center;
@@ -100,6 +125,10 @@ if "ocr_tp2" not in st.session_state:
 if "ocr_tp3" not in st.session_state:
     st.session_state.ocr_tp3 = "0.00000"
 
+if "trade_score" not in st.session_state:
+    st.session_state.trade_score = 0.0
+if "trade_rationale" not in st.session_state:
+    st.session_state.trade_rationale = ""
 if "order_bias" not in st.session_state:
     st.session_state.order_bias = "INVALID"
 
@@ -115,17 +144,32 @@ def format_price(val):
     except (ValueError, TypeError):
         return "0.00000"
 
-def extract_chart_levels_with_ai(image_file):
-    prompt = (
-        "Examine this trading chart image closely. Extract the exact numerical price figures "
-        "labeled or drawn for Entry, Stop Loss (SL), Take Profit 1 (TP1), Take Profit 2 (TP2), and Take Profit 3 (TP3). "
-        "Return ONLY raw JSON in this exact structure: "
-        "{\"entry\": float, \"sl\": float, \"tp1\": float, \"tp2\": float, \"tp3\": float}. "
-        "If a level is not clearly visible on the chart, assign 0.0 for that key."
-    )
-    
+def analyze_chart_with_ai(image_file, asset, timeframe):
+    prompt = f"""
+You are an expert ICT (Inner Circle Trader) and Smart Money Concepts (SMC) quantitative trading analyst examining a {asset} {timeframe} chart.
+Perform a complete technical analysis of price action and market structure in this image:
+
+1. MARKET STRUCTURE: Scan for Market Structure Shifts (MSS/CHoCH), Breaks of Structure (BOS), Fair Value Gaps (FVG), Order Blocks (OB), or Liquidity Sweeps.
+2. DIRECTIONAL BIAS: Determine if the setup is 'BUY', 'SELL', or 'NO_TRADE' (if structure is ambiguous/low probability).
+3. PRICE LEVELS: Extract or identify the optimal price points for Entry, Stop Loss (SL), Take Profit 1 (TP1), Take Profit 2 (TP2), and Take Profit 3 (TP3).
+4. CONFLUENCE SCORE: Rate the setup quality from 1.0 to 10.0 based on structural clarity.
+5. RATIONALE: Write a concise 2-sentence technical breakdown explaining the confluence.
+
+Return ONLY raw valid JSON matching this exact structure:
+{{
+  "bias": "BUY" | "SELL" | "NO_TRADE",
+  "score": float,
+  "rationale": "string",
+  "entry": float,
+  "sl": float,
+  "tp1": float,
+  "tp2": float,
+  "tp3": float
+}}
+"""
+
     if not GEMINI_KEY and not OPENAI_KEY:
-        st.error("🚨 Missing API Key! Add GEMINI_API_KEY or OPENAI_API_KEY in Streamlit Secrets.")
+        st.error("🚨 API Key Missing! Add GEMINI_API_KEY or OPENAI_API_KEY in Streamlit Secrets.")
         return None
 
     try:
@@ -155,8 +199,8 @@ def extract_chart_levels_with_ai(image_file):
             clean_text = res.choices[0].message.content.replace("```json", "").replace("```", "").strip()
             return json.loads(clean_text)
     except Exception as e:
-        st.error(f"Error reading image: {str(e)}")
-    
+        st.error(f"Error during AI Chart Analysis: {str(e)}")
+
     return None
 
 def render_circular_bias_gauge(bias):
@@ -175,7 +219,7 @@ def render_circular_bias_gauge(bias):
         label = "INVALID / NO TRADE"
         color = "#FFB300"
         rotation = 0
-    
+
     radius = 50
     circumference = 2 * 3.14159 * radius
     dash_offset = circumference - (percentage / 100.0) * circumference
@@ -210,13 +254,13 @@ def render_circular_bias_gauge(bias):
 # ---------------------------------------------------------
 with st.sidebar:
     st.markdown('<div class="section-header">⚡ CONTROL CENTER</div>', unsafe_allow_html=True)
-    
+
     if not st.session_state.settings_submitted:
         with st.form(key="asset_settings_form"):
             asset_input = st.text_input("Active Asset / Instrument", value="", placeholder="e.g. EURUSD, XAUUSD")
             timeframe_input = st.selectbox("Execution Timeframe", ["M1", "M5", "M15", "M30", "H1", "H4", "D1"], index=3)
             submit_button = st.form_submit_button(label="LAUNCH SESSION", type="primary", use_container_width=True)
-            
+
             if submit_button:
                 st.session_state.asset_name = asset_input.strip() if asset_input.strip() else "EURUSD"
                 st.session_state.timeframe = timeframe_input
@@ -232,7 +276,7 @@ with st.sidebar:
             st.rerun()
 
 # ---------------------------------------------------------
-# Main Execution Workspace
+# Main Workspace
 # ---------------------------------------------------------
 if not st.session_state.settings_submitted:
     st.markdown("""
@@ -268,13 +312,13 @@ else:
 
         with col_scan_left:
             st.markdown('<div class="section-header">1. CHART SCREENSHOT INGESTION</div>', unsafe_allow_html=True)
-            
+
             def reset_extraction_state():
                 st.session_state.extraction_performed = False
 
             ocr_file = st.file_uploader(
-                "Upload MT5 / TradingView Chart", 
-                type=["png", "jpg", "jpeg"], 
+                "Upload MT5 / TradingView Chart",
+                type=["png", "jpg", "jpeg"],
                 key="ocr_uploader",
                 on_change=reset_extraction_state
             )
@@ -283,30 +327,21 @@ else:
                 st.image(Image.open(ocr_file), use_container_width=True)
 
                 if st.button("⚡ EXECUTE VISION EXTRACTION", type="primary", use_container_width=True):
-                    with st.spinner("Analyzing image and extracting price levels..."):
-                        extracted = extract_chart_levels_with_ai(ocr_file)
-                        if extracted:
-                            st.session_state.ocr_entry = format_price(extracted.get("entry", 0.0))
-                            st.session_state.ocr_sl = format_price(extracted.get("sl", 0.0))
-                            st.session_state.ocr_tp1 = format_price(extracted.get("tp1", 0.0))
-                            st.session_state.ocr_tp2 = format_price(extracted.get("tp2", 0.0))
-                            st.session_state.ocr_tp3 = format_price(extracted.get("tp3", 0.0))
+                    with st.spinner("Analyzing market structure & ICT order flow..."):
+                        analysis = analyze_chart_with_ai(ocr_file, st.session_state.asset_name, st.session_state.timeframe)
+                        if analysis:
+                            st.session_state.ocr_entry = format_price(analysis.get("entry", 0.0))
+                            st.session_state.ocr_sl = format_price(analysis.get("sl", 0.0))
+                            st.session_state.ocr_tp1 = format_price(analysis.get("tp1", 0.0))
+                            st.session_state.ocr_tp2 = format_price(analysis.get("tp2", 0.0))
+                            st.session_state.ocr_tp3 = format_price(analysis.get("tp3", 0.0))
+                            st.session_state.trade_score = float(analysis.get("score", 0.0))
+                            st.session_state.trade_rationale = str(analysis.get("rationale", "No analysis rationale provided."))
 
-                            try:
-                                entry_val = float(st.session_state.ocr_entry)
-                                tp1_val = float(st.session_state.ocr_tp1)
-                                sl_val = float(st.session_state.ocr_sl)
-
-                                if entry_val > 0 and tp1_val > 0 and sl_val > 0:
-                                    if tp1_val > entry_val and sl_val < entry_val:
-                                        st.session_state.order_bias = "BUY"
-                                    elif tp1_val < entry_val and sl_val > entry_val:
-                                        st.session_state.order_bias = "SELL"
-                                    else:
-                                        st.session_state.order_bias = "INVALID"
-                                else:
-                                    st.session_state.order_bias = "INVALID"
-                            except ValueError:
+                            ai_bias = str(analysis.get("bias", "NO_TRADE")).upper()
+                            if ai_bias in ["BUY", "SELL"]:
+                                st.session_state.order_bias = ai_bias
+                            else:
                                 st.session_state.order_bias = "INVALID"
                         else:
                             st.session_state.ocr_entry = "0.00000"
@@ -314,6 +349,8 @@ else:
                             st.session_state.ocr_tp1 = "0.00000"
                             st.session_state.ocr_tp2 = "0.00000"
                             st.session_state.ocr_tp3 = "0.00000"
+                            st.session_state.trade_score = 0.0
+                            st.session_state.trade_rationale = "Failed to analyze chart structure."
                             st.session_state.order_bias = "INVALID"
 
                         st.session_state.extraction_performed = True
@@ -321,6 +358,37 @@ else:
 
         with col_scan_right:
             if ocr_file is not None and st.session_state.extraction_performed:
+                # --- AI ANALYSIS RATIONALE & METRICS ---
+                st.markdown('<div class="section-header">ICT ANALYSIS & CONFLUENCE</div>', unsafe_allow_html=True)
+
+                # Compute Risk Reward Ratio dynamically
+                try:
+                    e_num = float(st.session_state.ocr_entry)
+                    sl_num = float(st.session_state.ocr_sl)
+                    tp_num = float(st.session_state.ocr_tp1)
+
+                    risk = abs(e_num - sl_num)
+                    reward = abs(tp_num - e_num)
+                    rr_ratio = (reward / risk) if risk > 0 else 0.0
+                except (ValueError, ZeroDivisionError):
+                    rr_ratio = 0.0
+
+                score_color = "#00E676" if st.session_state.trade_score >= 7.0 else ("#FFB300" if st.session_state.trade_score >= 5.0 else "#FF1744")
+
+                st.markdown(f"""
+                <div class="analysis-card">
+                    <div style="margin-bottom: 10px;">
+                        <span class="stat-badge" style="background: rgba(0, 230, 118, 0.15); color: {score_color}; border: 1px solid {score_color};">
+                            SCORE: {st.session_state.trade_score:.1f} / 10
+                        </span>
+                        <span class="stat-badge" style="background: rgba(0, 176, 255, 0.15); color: #00B0FF; border: 1px solid #00B0FF;">
+                            R:R = 1:{rr_ratio:.2f}
+                        </span>
+                    </div>
+                    <div class="rationale-text">{st.session_state.trade_rationale}</div>
+                </div>
+                """, unsafe_allow_html=True)
+
                 st.markdown('<div class="section-header">2. PARAMETER VERIFICATION</div>', unsafe_allow_html=True)
 
                 st.session_state.ocr_entry = st.text_input("ENTRY PRICE", value=st.session_state.ocr_entry)
@@ -365,10 +433,12 @@ else:
                     "tp1": st.session_state.ocr_tp1,
                     "tp2": st.session_state.ocr_tp2,
                     "tp3": st.session_state.ocr_tp3,
-                    "lots": st.session_state.get("ocr_lots", 0.50)
+                    "lots": st.session_state.get("ocr_lots", 0.50),
+                    "score": st.session_state.trade_score,
+                    "rationale": st.session_state.trade_rationale
                 }
             else:
-                st.info("💡 Upload a chart screenshot on the left and click 'EXECUTE VISION EXTRACTION' to reveal price parameters and directional bias.")
+                st.info("💡 Upload a chart screenshot on the left and click 'EXECUTE VISION EXTRACTION' to analyze market structure and parameters.")
 
     with tabs[1]:
         order = st.session_state.get("active_order", {})
