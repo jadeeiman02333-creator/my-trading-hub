@@ -289,7 +289,16 @@ else:
 
         with col_scan_left:
             st.markdown('<div class="section-header">1. CHART SCREENSHOT INGESTION</div>', unsafe_allow_html=True)
-            ocr_file = st.file_uploader("Upload MT5 / TradingView Chart", type=["png", "jpg", "jpeg"], key="ocr_uploader")
+            
+            def reset_extraction_state():
+                st.session_state.extraction_performed = False
+
+            ocr_file = st.file_uploader(
+                "Upload MT5 / TradingView Chart", 
+                type=["png", "jpg", "jpeg"], 
+                key="ocr_uploader",
+                on_change=reset_extraction_state
+            )
 
             if ocr_file is not None:
                 st.image(Image.open(ocr_file), use_container_width=True)
@@ -307,7 +316,8 @@ else:
                         st.rerun()
 
         with col_scan_right:
-            # SECTION 2 AND BIAS WHEEL SHOW UP AFTER PRESSING EXTRACTION
+            # STRICT REQUIREMENT: Only show Section 2 and Bias Wheel IF
+            # an image is present AND the extraction button was clicked
             if ocr_file is not None and st.session_state.extraction_performed:
                 st.markdown('<div class="section-header">2. PARAMETER VERIFICATION</div>', unsafe_allow_html=True)
 
@@ -326,12 +336,12 @@ else:
                         st.write("")
                         st.code(fmt_str, language=None)
 
-                # Core levels always displayed
+                # Core extracted levels
                 render_copyable_card("ENTRY PRICE", st.session_state.ocr_entry, "#00B0FF")
                 render_copyable_card("STOP LOSS (SL)", st.session_state.ocr_sl, "#FF1744")
                 render_copyable_card("TARGET 1 (TP1)", st.session_state.ocr_tp1, "#00E676")
 
-                # TP2 and TP3 only render if valid values (> 0) exist
+                # TP2 and TP3 only render if valid positive values exist (> 0)
                 if st.session_state.ocr_tp2 > 0:
                     render_copyable_card("TARGET 2 (TP2)", st.session_state.ocr_tp2, "#00E676")
 
