@@ -4,7 +4,7 @@ import streamlit as st
 from PIL import Image
 
 # ---------------------------------------------------------
-# Page Configuration & High-Tech Styling
+# Page Configuration & Cyberpunk Theme
 # ---------------------------------------------------------
 st.set_page_config(
     page_title="Killzone // Algorithmic Terminal",
@@ -13,7 +13,6 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Optional Imports with Safe Fallbacks
 try:
     from google import genai
 except ImportError:
@@ -24,23 +23,13 @@ try:
 except ImportError:
     openai = None
 
-# Custom Modern Cyberpunk CSS
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700;800&family=Inter:wght@300;400;600;700&display=swap');
 
-    html, body, [class*="css"] {
-        font-family: 'Inter', sans-serif;
-    }
-    
-    code, .stCode, input {
-        font-family: 'JetBrains Mono', monospace !important;
-    }
-
-    .stApp {
-        background-color: #05070A;
-        color: #E2E8F0;
-    }
+    html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
+    code, .stCode, input { font-family: 'JetBrains Mono', monospace !important; }
+    .stApp { background-color: #05070A; color: #E2E8F0; }
 
     .killzone-title {
         font-family: 'JetBrains Mono', monospace;
@@ -72,29 +61,6 @@ st.markdown("""
         margin-bottom: 12px;
     }
 
-    .param-box {
-        background: rgba(15, 23, 42, 0.6);
-        border: 1px solid rgba(255, 255, 255, 0.08);
-        border-radius: 10px;
-        padding: 10px 14px;
-        margin-bottom: 8px;
-    }
-
-    .param-label {
-        font-family: 'JetBrains Mono', monospace;
-        font-size: 0.72rem;
-        color: #94A3B8;
-        font-weight: 700;
-        text-transform: uppercase;
-    }
-
-    .param-value {
-        font-family: 'JetBrains Mono', monospace;
-        font-size: 1.2rem;
-        font-weight: 800;
-        color: #FFFFFF;
-    }
-
     .status-badge {
         display: inline-flex;
         align-items: center;
@@ -120,22 +86,19 @@ if "asset_name" not in st.session_state:
 if "timeframe" not in st.session_state:
     st.session_state.timeframe = "M30"
 
-# Strict trigger flag for parameters & bias wheel display
 if "extraction_performed" not in st.session_state:
     st.session_state.extraction_performed = False
 
 if "ocr_entry" not in st.session_state:
-    st.session_state.ocr_entry = 0.0
+    st.session_state.ocr_entry = ""
 if "ocr_sl" not in st.session_state:
-    st.session_state.ocr_sl = 0.0
+    st.session_state.ocr_sl = ""
 if "ocr_tp1" not in st.session_state:
-    st.session_state.ocr_tp1 = 0.0
+    st.session_state.ocr_tp1 = ""
 if "ocr_tp2" not in st.session_state:
-    st.session_state.ocr_tp2 = 0.0
+    st.session_state.ocr_tp2 = ""
 if "ocr_tp3" not in st.session_state:
-    st.session_state.ocr_tp3 = 0.0
-if "ocr_lots" not in st.session_state:
-    st.session_state.ocr_lots = 0.50
+    st.session_state.ocr_tp3 = ""
 
 if "order_bias" not in st.session_state:
     st.session_state.order_bias = "BUY"
@@ -145,15 +108,14 @@ OPENAI_KEY = st.secrets.get("OPENAI_API_KEY", os.getenv("OPENAI_API_KEY", ""))
 
 def extract_chart_levels_with_ai(image_file):
     prompt = (
-        "Examine this trading chart image closely. Extract the exact numerical price figures "
-        "labeled or drawn for Entry, Stop Loss (SL), Take Profit 1 (TP1), Take Profit 2 (TP2), and Take Profit 3 (TP3). "
-        "Return ONLY raw JSON in this exact structure: "
-        "{\"entry\": float, \"sl\": float, \"tp1\": float, \"tp2\": float, \"tp3\": float}. "
-        "If TP2 or TP3 are not marked on the chart, assign 0.0 for those missing keys."
+        "You are an expert trading chart analyzer. Extract the exact numerical price figures "
+        "visible for Entry, Stop Loss (SL), Take Profit 1 (TP1), Take Profit 2 (TP2), and Take Profit 3 (TP3). "
+        "Return strictly raw valid JSON with keys: 'entry', 'sl', 'tp1', 'tp2', 'tp3'. "
+        "Values should be numeric or empty strings if not present."
     )
     
     if not GEMINI_KEY and not OPENAI_KEY:
-        st.error("🚨 API Key Missing! Add GEMINI_API_KEY or OPENAI_API_KEY in Streamlit Secrets.")
+        st.error("🚨 Missing API Key! Add GEMINI_API_KEY or OPENAI_API_KEY in Streamlit Secrets.")
         return None
 
     try:
@@ -183,7 +145,7 @@ def extract_chart_levels_with_ai(image_file):
             clean_text = res.choices[0].message.content.replace("```json", "").replace("```", "").strip()
             return json.loads(clean_text)
     except Exception as e:
-        st.error(f"Error processing image OCR: {str(e)}")
+        st.error(f"Vision OCR Extraction error: {str(e)}")
     
     return None
 
@@ -262,7 +224,6 @@ if not st.session_state.settings_submitted:
     </div>
     """, unsafe_allow_html=True)
 else:
-    # Header Banner
     st.markdown(f"""
     <div style="display: flex; justify-content: space-between; align-items: center; padding-bottom: 12px; margin-bottom: 20px; border-bottom: 1px solid rgba(255,255,255,0.08);">
         <div>
@@ -281,9 +242,6 @@ else:
         "⚡ 03. MT5 BRIDGE"
     ])
 
-    # =========================================================
-    # TAB 1: VISION SCAN & ORDER BUILDER
-    # =========================================================
     with tabs[0]:
         col_scan_left, col_scan_right = st.columns([1.1, 1], gap="large")
 
@@ -304,49 +262,41 @@ else:
                 st.image(Image.open(ocr_file), use_container_width=True)
 
                 if st.button("⚡ EXECUTE VISION EXTRACTION", type="primary", use_container_width=True):
-                    with st.spinner("Analyzing image and extracting exact levels..."):
-                        extracted_data = extract_chart_levels_with_ai(ocr_file)
-                        if extracted_data:
-                            st.session_state.ocr_entry = float(extracted_data.get("entry", 0.0))
-                            st.session_state.ocr_sl = float(extracted_data.get("sl", 0.0))
-                            st.session_state.ocr_tp1 = float(extracted_data.get("tp1", 0.0))
-                            st.session_state.ocr_tp2 = float(extracted_data.get("tp2", 0.0))
-                            st.session_state.ocr_tp3 = float(extracted_data.get("tp3", 0.0))
+                    with st.spinner("Analyzing image and extracting price levels..."):
+                        extracted = extract_chart_levels_with_ai(ocr_file)
+                        if extracted:
+                            st.session_state.ocr_entry = str(extracted.get("entry", ""))
+                            st.session_state.ocr_sl = str(extracted.get("sl", ""))
+                            st.session_state.ocr_tp1 = str(extracted.get("tp1", ""))
+                            st.session_state.ocr_tp2 = str(extracted.get("tp2", ""))
+                            st.session_state.ocr_tp3 = str(extracted.get("tp3", ""))
+
+                            try:
+                                entry_val = float(st.session_state.ocr_entry)
+                                tp1_val = float(st.session_state.ocr_tp1)
+                                if tp1_val > entry_val:
+                                    st.session_state.order_bias = "BUY"
+                                elif tp1_val < entry_val:
+                                    st.session_state.order_bias = "SELL"
+                            except ValueError:
+                                pass
+
                         st.session_state.extraction_performed = True
                         st.rerun()
 
         with col_scan_right:
-            # STRICT REQUIREMENT: Only show Section 2 and Bias Wheel IF
-            # an image is present AND the extraction button was clicked
             if ocr_file is not None and st.session_state.extraction_performed:
                 st.markdown('<div class="section-header">2. PARAMETER VERIFICATION</div>', unsafe_allow_html=True)
 
-                def render_copyable_card(label, val_float, color_hex="#FFFFFF"):
-                    fmt_str = f"{val_float:.2f}" if val_float > 500 else f"{val_float:.5f}"
-                    
-                    c_card, c_btn = st.columns([3, 1])
-                    with c_card:
-                        st.markdown(f"""
-                        <div class="param-box">
-                            <div class="param-label">{label}</div>
-                            <div class="param-value" style="color: {color_hex};">{fmt_str}</div>
-                        </div>
-                        """, unsafe_allow_html=True)
-                    with c_btn:
-                        st.write("")
-                        st.code(fmt_str, language=None)
+                st.session_state.ocr_entry = st.text_input("ENTRY PRICE", value=st.session_state.ocr_entry)
+                st.session_state.ocr_sl = st.text_input("STOP LOSS (SL)", value=st.session_state.ocr_sl)
+                st.session_state.ocr_tp1 = st.text_input("TARGET 1 (TP1)", value=st.session_state.ocr_tp1)
 
-                # Core extracted levels
-                render_copyable_card("ENTRY PRICE", st.session_state.ocr_entry, "#00B0FF")
-                render_copyable_card("STOP LOSS (SL)", st.session_state.ocr_sl, "#FF1744")
-                render_copyable_card("TARGET 1 (TP1)", st.session_state.ocr_tp1, "#00E676")
+                if st.session_state.ocr_tp2 != "" and st.session_state.ocr_tp2 != "0" and st.session_state.ocr_tp2 != "0.0":
+                    st.session_state.ocr_tp2 = st.text_input("TARGET 2 (TP2)", value=st.session_state.ocr_tp2)
 
-                # TP2 and TP3 only render if valid positive values exist (> 0)
-                if st.session_state.ocr_tp2 > 0:
-                    render_copyable_card("TARGET 2 (TP2)", st.session_state.ocr_tp2, "#00E676")
-
-                if st.session_state.ocr_tp3 > 0:
-                    render_copyable_card("TARGET 3 (TP3)", st.session_state.ocr_tp3, "#00E676")
+                if st.session_state.ocr_tp3 != "" and st.session_state.ocr_tp3 != "0" and st.session_state.ocr_tp3 != "0.0":
+                    st.session_state.ocr_tp3 = st.text_input("TARGET 3 (TP3)", value=st.session_state.ocr_tp3)
 
                 st.markdown("---")
                 st.markdown('<div class="section-header">ORDER DIRECTION BIAS</div>', unsafe_allow_html=True)
@@ -377,44 +327,19 @@ else:
             else:
                 st.info("💡 Upload a chart screenshot on the left and click 'EXECUTE VISION EXTRACTION' to reveal price parameters and directional bias.")
 
-    # =========================================================
-    # TAB 2: RISK MATRIX
-    # =========================================================
     with tabs[1]:
-        order = st.session_state.get("active_order", {
-            "asset": st.session_state.asset_name,
-            "timeframe": st.session_state.timeframe,
-            "type": st.session_state.order_bias,
-            "entry": st.session_state.ocr_entry,
-            "sl": st.session_state.ocr_sl,
-            "tp1": st.session_state.ocr_tp1,
-            "tp2": st.session_state.ocr_tp2,
-            "tp3": st.session_state.ocr_tp3,
-            "lots": st.session_state.ocr_lots
-        })
-
+        order = st.session_state.get("active_order", {})
         st.markdown('<div class="section-header">LOT SIZE & EXPOSURE</div>', unsafe_allow_html=True)
-        updated_lots = st.number_input("Aggregate Lots", value=order["lots"], format="%.2f", step=0.01, key="risk_matrix_lot_input")
-        order["lots"] = updated_lots
+        updated_lots = st.number_input("Aggregate Lots", value=order.get("lots", 0.50), format="%.2f", step=0.01)
 
         st.markdown("---")
         st.markdown('<div class="section-header">📥 EXPORT BUNDLE</div>', unsafe_allow_html=True)
 
         json_export = json.dumps(order, indent=4)
-        txt_export = f"Asset: {order['asset']}\nEntry: {order['entry']}\nSL: {order['sl']}\nTP1: {order['tp1']}\nTP2: {order['tp2']}\nTP3: {order['tp3']}\nLots: {order['lots']}"
-        csv_export = f"Asset,Type,Entry,SL,TP1,TP2,TP3,Lots\n{order['asset']},{order['type']},{order['entry']},{order['sl']},{order['tp1']},{order['tp2']},{order['tp3']},{order['lots']}"
-
         col_d1, col_d2, col_d3 = st.columns(3)
         with col_d1:
-            st.download_button("💾 DOWNLOAD JSON", data=json_export, file_name=f"{order['asset']}_order.json", mime="application/json", type="primary", use_container_width=True)
-        with col_d2:
-            st.download_button("📄 DOWNLOAD TXT", data=txt_export, file_name=f"{order['asset']}_order.txt", mime="text/plain", use_container_width=True)
-        with col_d3:
-            st.download_button("📊 DOWNLOAD CSV", data=csv_export, file_name=f"{order['asset']}_order.csv", mime="text/csv", use_container_width=True)
+            st.download_button("💾 DOWNLOAD JSON", data=json_export, file_name="order.json", mime="application/json", type="primary", use_container_width=True)
 
-    # =========================================================
-    # TAB 3: MT5 BRIDGE
-    # =========================================================
     with tabs[2]:
         st.markdown('<div class="section-header">⚡ MT5 SIGNAL DISPATCH</div>', unsafe_allow_html=True)
         order = st.session_state.get("active_order", {})
