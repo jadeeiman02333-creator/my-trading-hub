@@ -4,10 +4,10 @@ import streamlit as st
 from PIL import Image
 
 # ---------------------------------------------------------
-# Page Configuration & Styling
+# Page Configuration & High-Tech Styling
 # ---------------------------------------------------------
 st.set_page_config(
-    page_title="Killzone // Algorithmic Order Flow Terminal",
+    page_title="Killzone // Algorithmic Terminal",
     page_icon="⚡",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -24,7 +24,7 @@ try:
 except ImportError:
     openai = None
 
-# Custom High-Tech Cyberpunk CSS
+# Custom Modern Cyberpunk CSS
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700;800&family=Inter:wght@300;400;600;700&display=swap');
@@ -120,6 +120,10 @@ if "asset_name" not in st.session_state:
 if "timeframe" not in st.session_state:
     st.session_state.timeframe = "M30"
 
+# Strict trigger flag for parameters & bias wheel display
+if "extraction_performed" not in st.session_state:
+    st.session_state.extraction_performed = False
+
 if "ocr_entry" not in st.session_state:
     st.session_state.ocr_entry = 0.0
 if "ocr_sl" not in st.session_state:
@@ -140,7 +144,18 @@ GEMINI_KEY = st.secrets.get("GEMINI_API_KEY", os.getenv("GEMINI_API_KEY", ""))
 OPENAI_KEY = st.secrets.get("OPENAI_API_KEY", os.getenv("OPENAI_API_KEY", ""))
 
 def extract_chart_levels_with_ai(image_file):
-    prompt = "Analyze this chart screenshot. Extract numerical price levels for Entry, Stop Loss (SL), and Take Profits (TP1, TP2, TP3). Return ONLY raw valid JSON: {\"entry\": float, \"sl\": float, \"tp1\": float, \"tp2\": float, \"tp3\": float}. If TP2 or TP3 are not present on the chart, return 0.0 for them."
+    prompt = (
+        "Examine this trading chart image closely. Extract the exact numerical price figures "
+        "labeled or drawn for Entry, Stop Loss (SL), Take Profit 1 (TP1), Take Profit 2 (TP2), and Take Profit 3 (TP3). "
+        "Return ONLY raw JSON in this exact structure: "
+        "{\"entry\": float, \"sl\": float, \"tp1\": float, \"tp2\": float, \"tp3\": float}. "
+        "If TP2 or TP3 are not marked on the chart, assign 0.0 for those missing keys."
+    )
+    
+    if not GEMINI_KEY and not OPENAI_KEY:
+        st.error("🚨 API Key Missing! Please add GEMINI_API_KEY or OPENAI_API_KEY in Streamlit Cloud Secrets.")
+        return {"entry": 0.0, "sl": 0.0, "tp1": 0.0, "tp2": 0.0, "tp3": 0.0}
+
     try:
         if GEMINI_KEY and genai:
             client = genai.Client(api_key=GEMINI_KEY)
@@ -168,9 +183,9 @@ def extract_chart_levels_with_ai(image_file):
             clean_text = res.choices[0].message.content.replace("```json", "").replace("```", "").strip()
             return json.loads(clean_text)
     except Exception as e:
-        st.warning(f"Vision Engine Fallback: {str(e)}")
+        st.error(f"Error processing image OCR: {str(e)}")
     
-    return {"entry": 2450.50, "sl": 2442.00, "tp1": 2465.00, "tp2": 0.0, "tp3": 0.0}
+    return {"entry": 0.0, "sl": 0.0, "tp1": 0.0, "tp2": 0.0, "tp3": 0.0}
 
 def render_circular_bias_gauge(bias):
     percentage = 88 if bias == "BUY" else 12
@@ -215,7 +230,6 @@ with st.sidebar:
     
     if not st.session_state.settings_submitted:
         with st.form(key="asset_settings_form"):
-            # Empty value with placeholder so you don't have to delete "EurUsd" every time
             asset_input = st.text_input("Active Asset / Instrument", value="", placeholder="e.g. EURUSD, XAUUSD")
             timeframe_input = st.selectbox("Execution Timeframe", ["M1", "M5", "M15", "M30", "H1", "H4", "D1"], index=3)
             submit_button = st.form_submit_button(label="LAUNCH SESSION", type="primary", use_container_width=True)
@@ -224,12 +238,14 @@ with st.sidebar:
                 st.session_state.asset_name = asset_input.strip() if asset_input.strip() else "EURUSD"
                 st.session_state.timeframe = timeframe_input
                 st.session_state.settings_submitted = True
+                st.session_state.extraction_performed = False
                 st.rerun()
     else:
         st.markdown(f"**ACTIVE:** `{st.session_state.asset_name}` [{st.session_state.timeframe}]")
         st.write("")
         if st.button("🔄 Change Session", use_container_width=True):
             st.session_state.settings_submitted = False
+            st.session_state.extraction_performed = False
             st.rerun()
 
 # ---------------------------------------------------------
@@ -279,18 +295,20 @@ else:
                 st.image(Image.open(ocr_file), use_container_width=True)
 
                 if st.button("⚡ EXECUTE VISION EXTRACTION", type="primary", use_container_width=True):
-                    with st.spinner("Analyzing chart levels..."):
+                    with st.spinner("Analyzing image and extracting exact levels..."):
                         extracted_data = extract_chart_levels_with_ai(ocr_file)
                         st.session_state.ocr_entry = float(extracted_data.get("entry", 0.0))
                         st.session_state.ocr_sl = float(extracted_data.get("sl", 0.0))
                         st.session_state.ocr_tp1 = float(extracted_data.get("tp1", 0.0))
                         st.session_state.ocr_tp2 = float(extracted_data.get("tp2", 0.0))
                         st.session_state.ocr_tp3 = float(extracted_data.get("tp3", 0.0))
+                        st.session_state.extraction_performed = True
                         st.rerun()
 
         with col_scan_right:
-            # STRICT REQUIREMENT: Only appear once image is uploaded
-            if ocr_file is not None:
+            # BOTH SECTION 2 AND ORDER DIRECTION BIAS ONLY DISPLAY
+            # AFTER PRESSED: 'EXECUTE VISION EXTRACTION'
+            if ocr_file is not None and st.session_state.extraction_performed:
                 st.markdown('<div class="section-header">2. PARAMETER VERIFICATION</div>', unsafe_allow_html=True)
 
                 def render_copyable_card(label, val_float, color_hex="#FFFFFF"):
@@ -310,12 +328,12 @@ else:
                         st.write("")
                         st.code(fmt_str, language=None)
 
-                # Render Entry, SL, and TP1
+                # Render extracted price levels
                 render_copyable_card("ENTRY PRICE", st.session_state.ocr_entry, "#00B0FF")
                 render_copyable_card("STOP LOSS (SL)", st.session_state.ocr_sl, "#FF1744")
                 render_copyable_card("TARGET 1 (TP1)", st.session_state.ocr_tp1, "#00E676")
 
-                # ONLY show TP2 / TP3 if there is a valid take profit level
+                # Only render TP2 and TP3 if valid prices exist (> 0)
                 if st.session_state.ocr_tp2 > 0:
                     render_copyable_card("TARGET 2 (TP2)", st.session_state.ocr_tp2, "#00E676")
 
@@ -349,7 +367,7 @@ else:
                     "lots": st.session_state.get("ocr_lots", 0.50)
                 }
             else:
-                st.info("💡 Upload a chart screenshot on the left to reveal parameter verification.")
+                st.info("💡 Upload a chart screenshot on the left and click 'EXECUTE VISION EXTRACTION' to reveal price parameters and directional bias.")
 
     # =========================================================
     # TAB 2: RISK MATRIX
