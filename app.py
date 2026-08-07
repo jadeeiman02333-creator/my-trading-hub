@@ -166,35 +166,35 @@ Return ONLY raw valid JSON in this exact structure:
 """
 
     if not GEMINI_KEY:
-        return {"error": "GEMINI_API_KEY missing in Streamlit Secrets. Go to App Settings -> Secrets to add it."}
+        return {"error": "GEMINI_API_KEY missing in Streamlit Secrets. Add it under App Settings -> Secrets."}
 
     if not genai:
         return {"error": "'google-genai' package is not installed. Ensure 'google-genai' is listed in requirements.txt."}
 
-    try:
-        client = genai.Client(api_key=GEMINI_KEY)
-        
-        # Priority list of Gemini models
-        candidate_models = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"]
-        last_exception = ""
+    candidate_models = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"]
+    last_error = ""
 
-        for model_name in candidate_models:
-            try:
-                res = client.models.generate_content(
-                    model=model_name,
-                    contents=[prompt, pil_image]
-                )
-                raw_text = res.text.strip()
-                clean_text = re.sub(r'```(?:json)?', '', raw_text).replace('```', '').strip()
-                return json.loads(clean_text)
-            except Exception as e:
-                last_exception = f"[{model_name}]: {str(e)}"
-                continue
+    # Test v1 stable endpoint first, then v1beta as fallback
+    for api_ver in ["v1", "v1beta"]:
+        try:
+            client = genai.Client(api_key=GEMINI_KEY, http_options={"api_version": api_ver})
+            for model_name in candidate_models:
+                try:
+                    res = client.models.generate_content(
+                        model=model_name,
+                        contents=[prompt, pil_image]
+                    )
+                    raw_text = res.text.strip()
+                    clean_text = re.sub(r'```(?:json)?', '', raw_text).replace('```', '').strip()
+                    return json.loads(clean_text)
+                except Exception as e:
+                    last_error = f"[{model_name} @ {api_ver}]: {str(e)}"
+                    continue
+        except Exception as e:
+            last_error = f"Client Init [{api_ver}]: {str(e)}"
+            continue
 
-        return {"error": f"All Gemini models failed. Last error: {last_exception}"}
-
-    except Exception as e:
-        return {"error": f"Gemini Initialization Error: {str(e)}"}
+    return {"error": f"All Gemini models failed. Last error: {last_error}"}
 
 def render_circular_bias_gauge(bias):
     if bias == "BUY":
