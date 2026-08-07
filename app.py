@@ -153,8 +153,8 @@ def extract_chart_levels_with_ai(image_file):
     )
     
     if not GEMINI_KEY and not OPENAI_KEY:
-        st.error("🚨 API Key Missing! Please add GEMINI_API_KEY or OPENAI_API_KEY in Streamlit Cloud Secrets.")
-        return {"entry": 0.0, "sl": 0.0, "tp1": 0.0, "tp2": 0.0, "tp3": 0.0}
+        st.error("🚨 API Key Missing! Add GEMINI_API_KEY or OPENAI_API_KEY in Streamlit Secrets.")
+        return None
 
     try:
         if GEMINI_KEY and genai:
@@ -185,7 +185,7 @@ def extract_chart_levels_with_ai(image_file):
     except Exception as e:
         st.error(f"Error processing image OCR: {str(e)}")
     
-    return {"entry": 0.0, "sl": 0.0, "tp1": 0.0, "tp2": 0.0, "tp3": 0.0}
+    return None
 
 def render_circular_bias_gauge(bias):
     percentage = 88 if bias == "BUY" else 12
@@ -297,23 +297,21 @@ else:
                 if st.button("⚡ EXECUTE VISION EXTRACTION", type="primary", use_container_width=True):
                     with st.spinner("Analyzing image and extracting exact levels..."):
                         extracted_data = extract_chart_levels_with_ai(ocr_file)
-                        st.session_state.ocr_entry = float(extracted_data.get("entry", 0.0))
-                        st.session_state.ocr_sl = float(extracted_data.get("sl", 0.0))
-                        st.session_state.ocr_tp1 = float(extracted_data.get("tp1", 0.0))
-                        st.session_state.ocr_tp2 = float(extracted_data.get("tp2", 0.0))
-                        st.session_state.ocr_tp3 = float(extracted_data.get("tp3", 0.0))
+                        if extracted_data:
+                            st.session_state.ocr_entry = float(extracted_data.get("entry", 0.0))
+                            st.session_state.ocr_sl = float(extracted_data.get("sl", 0.0))
+                            st.session_state.ocr_tp1 = float(extracted_data.get("tp1", 0.0))
+                            st.session_state.ocr_tp2 = float(extracted_data.get("tp2", 0.0))
+                            st.session_state.ocr_tp3 = float(extracted_data.get("tp3", 0.0))
                         st.session_state.extraction_performed = True
                         st.rerun()
 
         with col_scan_right:
-            # BOTH SECTION 2 AND ORDER DIRECTION BIAS ONLY DISPLAY
-            # AFTER PRESSED: 'EXECUTE VISION EXTRACTION'
+            # SECTION 2 AND BIAS WHEEL SHOW UP AFTER PRESSING EXTRACTION
             if ocr_file is not None and st.session_state.extraction_performed:
                 st.markdown('<div class="section-header">2. PARAMETER VERIFICATION</div>', unsafe_allow_html=True)
 
                 def render_copyable_card(label, val_float, color_hex="#FFFFFF"):
-                    if val_float <= 0:
-                        return
                     fmt_str = f"{val_float:.2f}" if val_float > 500 else f"{val_float:.5f}"
                     
                     c_card, c_btn = st.columns([3, 1])
@@ -328,12 +326,12 @@ else:
                         st.write("")
                         st.code(fmt_str, language=None)
 
-                # Render extracted price levels
+                # Core levels always displayed
                 render_copyable_card("ENTRY PRICE", st.session_state.ocr_entry, "#00B0FF")
                 render_copyable_card("STOP LOSS (SL)", st.session_state.ocr_sl, "#FF1744")
                 render_copyable_card("TARGET 1 (TP1)", st.session_state.ocr_tp1, "#00E676")
 
-                # Only render TP2 and TP3 if valid prices exist (> 0)
+                # TP2 and TP3 only render if valid values (> 0) exist
                 if st.session_state.ocr_tp2 > 0:
                     render_copyable_card("TARGET 2 (TP2)", st.session_state.ocr_tp2, "#00E676")
 
