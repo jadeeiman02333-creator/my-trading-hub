@@ -90,28 +90,38 @@ if "extraction_performed" not in st.session_state:
     st.session_state.extraction_performed = False
 
 if "ocr_entry" not in st.session_state:
-    st.session_state.ocr_entry = ""
+    st.session_state.ocr_entry = "0.00000"
 if "ocr_sl" not in st.session_state:
-    st.session_state.ocr_sl = ""
+    st.session_state.ocr_sl = "0.00000"
 if "ocr_tp1" not in st.session_state:
-    st.session_state.ocr_tp1 = ""
+    st.session_state.ocr_tp1 = "0.00000"
 if "ocr_tp2" not in st.session_state:
-    st.session_state.ocr_tp2 = ""
+    st.session_state.ocr_tp2 = "0.00000"
 if "ocr_tp3" not in st.session_state:
-    st.session_state.ocr_tp3 = ""
+    st.session_state.ocr_tp3 = "0.00000"
 
 if "order_bias" not in st.session_state:
-    st.session_state.order_bias = "BUY"
+    st.session_state.order_bias = "INVALID"
 
 GEMINI_KEY = st.secrets.get("GEMINI_API_KEY", os.getenv("GEMINI_API_KEY", ""))
 OPENAI_KEY = st.secrets.get("OPENAI_API_KEY", os.getenv("OPENAI_API_KEY", ""))
 
+def format_price(val):
+    try:
+        num = float(val)
+        if num == 0.0:
+            return "0.00000"
+        return f"{num:.2f}" if num > 500 else f"{num:.5f}"
+    except (ValueError, TypeError):
+        return "0.00000"
+
 def extract_chart_levels_with_ai(image_file):
     prompt = (
-        "You are an expert trading chart analyzer. Extract the exact numerical price figures "
-        "visible for Entry, Stop Loss (SL), Take Profit 1 (TP1), Take Profit 2 (TP2), and Take Profit 3 (TP3). "
-        "Return strictly raw valid JSON with keys: 'entry', 'sl', 'tp1', 'tp2', 'tp3'. "
-        "Values should be numeric or empty strings if not present."
+        "Examine this trading chart image closely. Extract the exact numerical price figures "
+        "labeled or drawn for Entry, Stop Loss (SL), Take Profit 1 (TP1), Take Profit 2 (TP2), and Take Profit 3 (TP3). "
+        "Return ONLY raw JSON in this exact structure: "
+        "{\"entry\": float, \"sl\": float, \"tp1\": float, \"tp2\": float, \"tp3\": float}. "
+        "If a level is not clearly visible on the chart, assign 0.0 for that key."
     )
     
     if not GEMINI_KEY and not OPENAI_KEY:
@@ -145,15 +155,26 @@ def extract_chart_levels_with_ai(image_file):
             clean_text = res.choices[0].message.content.replace("```json", "").replace("```", "").strip()
             return json.loads(clean_text)
     except Exception as e:
-        st.error(f"Vision OCR Extraction error: {str(e)}")
+        st.error(f"Error reading image: {str(e)}")
     
     return None
 
 def render_circular_bias_gauge(bias):
-    percentage = 88 if bias == "BUY" else 12
-    label = "BULLISH BIAS" if bias == "BUY" else "BEARISH BIAS"
-    color = "#00E676" if bias == "BUY" else "#FF1744"
-    rotation = 45 if bias == "BUY" else -135
+    if bias == "BUY":
+        percentage = 88
+        label = "BULLISH BIAS"
+        color = "#00E676"
+        rotation = 45
+    elif bias == "SELL":
+        percentage = 12
+        label = "BEARISH BIAS"
+        color = "#FF1744"
+        rotation = -135
+    else:
+        percentage = 50
+        label = "INVALID / NO TRADE"
+        color = "#FFB300"
+        rotation = 0
     
     radius = 50
     circumference = 2 * 3.14159 * radius
@@ -170,7 +191,7 @@ def render_circular_bias_gauge(bias):
             <g transform="rotate({rotation} 60 60)" style="transition: transform 0.8s ease-in-out;">
                 <polygon points="60,20 54,35 66,35" fill="{color}" />
             </g>
-            <text x="60" y="58" font-family="'JetBrains Mono', monospace" font-size="16" font-weight="800" fill="#FFFFFF" text-anchor="middle" dominant-baseline="central">
+            <text x="60" y="58" font-family="'JetBrains Mono', monospace" font-size="14" font-weight="800" fill="#FFFFFF" text-anchor="middle" dominant-baseline="central">
                 {bias}
             </text>
             <text x="60" y="76" font-family="'Inter', sans-serif" font-size="8" font-weight="700" fill="#94A3B8" text-anchor="middle">
@@ -265,21 +286,35 @@ else:
                     with st.spinner("Analyzing image and extracting price levels..."):
                         extracted = extract_chart_levels_with_ai(ocr_file)
                         if extracted:
-                            st.session_state.ocr_entry = str(extracted.get("entry", ""))
-                            st.session_state.ocr_sl = str(extracted.get("sl", ""))
-                            st.session_state.ocr_tp1 = str(extracted.get("tp1", ""))
-                            st.session_state.ocr_tp2 = str(extracted.get("tp2", ""))
-                            st.session_state.ocr_tp3 = str(extracted.get("tp3", ""))
+                            st.session_state.ocr_entry = format_price(extracted.get("entry", 0.0))
+                            st.session_state.ocr_sl = format_price(extracted.get("sl", 0.0))
+                            st.session_state.ocr_tp1 = format_price(extracted.get("tp1", 0.0))
+                            st.session_state.ocr_tp2 = format_price(extracted.get("tp2", 0.0))
+                            st.session_state.ocr_tp3 = format_price(extracted.get("tp3", 0.0))
 
                             try:
                                 entry_val = float(st.session_state.ocr_entry)
                                 tp1_val = float(st.session_state.ocr_tp1)
-                                if tp1_val > entry_val:
-                                    st.session_state.order_bias = "BUY"
-                                elif tp1_val < entry_val:
-                                    st.session_state.order_bias = "SELL"
+                                sl_val = float(st.session_state.ocr_sl)
+
+                                if entry_val > 0 and tp1_val > 0 and sl_val > 0:
+                                    if tp1_val > entry_val and sl_val < entry_val:
+                                        st.session_state.order_bias = "BUY"
+                                    elif tp1_val < entry_val and sl_val > entry_val:
+                                        st.session_state.order_bias = "SELL"
+                                    else:
+                                        st.session_state.order_bias = "INVALID"
+                                else:
+                                    st.session_state.order_bias = "INVALID"
                             except ValueError:
-                                pass
+                                st.session_state.order_bias = "INVALID"
+                        else:
+                            st.session_state.ocr_entry = "0.00000"
+                            st.session_state.ocr_sl = "0.00000"
+                            st.session_state.ocr_tp1 = "0.00000"
+                            st.session_state.ocr_tp2 = "0.00000"
+                            st.session_state.ocr_tp3 = "0.00000"
+                            st.session_state.order_bias = "INVALID"
 
                         st.session_state.extraction_performed = True
                         st.rerun()
@@ -292,11 +327,19 @@ else:
                 st.session_state.ocr_sl = st.text_input("STOP LOSS (SL)", value=st.session_state.ocr_sl)
                 st.session_state.ocr_tp1 = st.text_input("TARGET 1 (TP1)", value=st.session_state.ocr_tp1)
 
-                if st.session_state.ocr_tp2 != "" and st.session_state.ocr_tp2 != "0" and st.session_state.ocr_tp2 != "0.0":
-                    st.session_state.ocr_tp2 = st.text_input("TARGET 2 (TP2)", value=st.session_state.ocr_tp2)
+                try:
+                    tp2_num = float(st.session_state.ocr_tp2)
+                    if tp2_num > 0:
+                        st.session_state.ocr_tp2 = st.text_input("TARGET 2 (TP2)", value=st.session_state.ocr_tp2)
+                except ValueError:
+                    pass
 
-                if st.session_state.ocr_tp3 != "" and st.session_state.ocr_tp3 != "0" and st.session_state.ocr_tp3 != "0.0":
-                    st.session_state.ocr_tp3 = st.text_input("TARGET 3 (TP3)", value=st.session_state.ocr_tp3)
+                try:
+                    tp3_num = float(st.session_state.ocr_tp3)
+                    if tp3_num > 0:
+                        st.session_state.ocr_tp3 = st.text_input("TARGET 3 (TP3)", value=st.session_state.ocr_tp3)
+                except ValueError:
+                    pass
 
                 st.markdown("---")
                 st.markdown('<div class="section-header">ORDER DIRECTION BIAS</div>', unsafe_allow_html=True)
