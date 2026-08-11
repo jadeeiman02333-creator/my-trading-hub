@@ -126,7 +126,8 @@ if "trade_rationale" not in st.session_state:
 if "order_bias" not in st.session_state:
     st.session_state.order_bias = "INVALID"
 
-GEMINI_KEY = st.secrets.get("GEMINI_API_KEY", os.getenv("GEMINI_API_KEY", ""))
+raw_key = st.secrets.get("GEMINI_API_KEY", os.getenv("GEMINI_API_KEY", ""))
+GEMINI_KEY = str(raw_key).strip().strip('"').strip("'")
 
 def format_price(val):
     try:
@@ -139,7 +140,7 @@ def format_price(val):
 
 def analyze_chart_with_ai(pil_image, asset, timeframe):
     if not GEMINI_KEY:
-        return {"error": "GEMINI_API_KEY missing in Streamlit Secrets. Add it under App Settings -> Secrets."}
+        return {"error": "GEMINI_API_KEY missing in Streamlit Secrets. Go to App Settings -> Secrets to add it."}
 
     # Convert image to Base64
     buffered = io.BytesIO()
@@ -169,7 +170,11 @@ Return ONLY raw valid JSON matching this exact structure:
 }}
 """
 
-    headers = {"Content-Type": "application/json"}
+    headers = {
+        "Content-Type": "application/json",
+        "x-goog-api-key": GEMINI_KEY
+    }
+    
     payload = {
         "contents": [{
             "parts": [
@@ -184,27 +189,50 @@ Return ONLY raw valid JSON matching this exact structure:
         }]
     }
 
-    # Endpoint matrix to guarantee execution
-    endpoints = [
-        f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={GEMINI_KEY}",
-        f"https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key={GEMINI_KEY}",
-        f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_KEY}"
-    ]
+    # 1. Dynamically discover supported models for this API key
+    candidate_models = []
+    try:
+        models_url = f"https://generativelanguage.googleapis.com/v1beta/models?key={GEMINI_KEY}"
+        res = requests.get(models_url, headers=headers, timeout=10)
+        if res.status_code == 200:
+            models_data = res.json()
+            for m in models_data.get("models", []):
+                if "generateContent" in m.get("supportedGenerationMethods", []):
+                    m_id = m.get("name", "").replace("models/", "")
+                    if any(k in m_id for k in ["flash", "pro"]):
+                        candidate_models.append(m_id)
+        elif res.status_code in [400, 401, 403]:
+            return {"error": f"API Key rejected by Google (HTTP {res.status_code}). Please verify your key at aistudio.google.com/app/apikey"}
+    except Exception:
+        pass
+
+    # 2. Fallback model list if dynamic discovery returns empty
+    if not candidate_models:
+        candidate_models = [
+            "gemini-2.0-flash",
+            "gemini-2.5-flash",
+            "gemini-1.5-flash",
+            "gemini-1.5-flash-latest",
+            "gemini-1.5-pro"
+        ]
 
     last_error = ""
 
-    for url in endpoints:
-        try:
-            response = requests.post(url, headers=headers, json=payload, timeout=30)
-            if response.status_code == 200:
-                res_data = response.json()
-                raw_text = res_data['candidates'][0]['content']['parts'][0]['text']
-                clean_text = re.sub(r'```(?:json)?', '', raw_text).replace('```', '').strip()
-                return json.loads(clean_text)
-            else:
-                last_error = f"HTTP {response.status_code}: {response.text}"
-        except Exception as e:
-            last_error = f"Request Exception: {str(e)}"
+    # 3. Iterate models and endpoints
+    for model_name in candidate_models:
+        for api_ver in ["v1beta", "v1"]:
+            url = f"https://generativelanguage.googleapis.com/{api_ver}/models/{model_name}:generateContent?key={GEMINI_KEY}"
+            try:
+                response = requests.post(url, headers=headers, json=payload, timeout=30)
+                if response.status_code == 200:
+                    res_data = response.json()
+                    raw_text = res_data['candidates'][0]['content']['parts'][0]['text']
+                    clean_text = re.sub(r'```(?:json)?', '', raw_text).replace('```', '').strip()
+                    return json.loads(clean_text)
+                else:
+                    last_error = f"[{model_name} @ {api_ver}] HTTP {response.status_code}: {response.text}"
+            except Exception as e:
+                last_error = f"[{model_name} @ {api_ver}] Exception: {str(e)}"
 
     return {"error": f"API Call Failed. Last Response: {last_error}"}
 
