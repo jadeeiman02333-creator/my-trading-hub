@@ -8,14 +8,23 @@ import streamlit as st
 from PIL import Image
 
 # ---------------------------------------------------------
-# Page Configuration & High-Tech Styling
+# Page Configuration & Styling (Custom Favicon)
 # ---------------------------------------------------------
+PAGE_ICON = "logo.png" if os.path.exists("logo.png") else "⚡"
+
 st.set_page_config(
     page_title="Killzone // Algorithmic Terminal",
-    page_icon="⚡",
+    page_icon=PAGE_ICON,
     layout="wide",
     initial_sidebar_state="expanded"
 )
+
+# Native Streamlit Top-Left Logo (if file exists)
+if os.path.exists("logo.png"):
+    try:
+        st.logo("logo.png")
+    except Exception:
+        pass
 
 # Auto-detect live app URL via request headers or fallback
 def resolve_app_url():
@@ -110,7 +119,6 @@ st.markdown("""
         border: 1px solid rgba(0, 230, 118, 0.3);
         border-radius: 12px;
         padding: 14px;
-        margin-top: 10px;
         font-family: 'JetBrains Mono', monospace;
     }
 
@@ -163,6 +171,12 @@ st.markdown("""
         background: rgba(0, 230, 118, 0.12);
         color: #00E676;
         border: 1px solid rgba(0, 230, 118, 0.4);
+    }
+
+    .st-expander {
+        border: 1px solid rgba(0, 230, 118, 0.3) !important;
+        border-radius: 8px !important;
+        background-color: rgba(15, 23, 42, 0.6) !important;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -394,6 +408,9 @@ def render_circular_bias_gauge(bias, accuracy_pct=0.0):
 # Sidebar
 # ---------------------------------------------------------
 with st.sidebar:
+    if os.path.exists("logo.png"):
+        st.image("logo.png", use_container_width=True)
+
     st.markdown('<div class="section-header">⚡ CONTROL CENTER</div>', unsafe_allow_html=True)
 
     if not st.session_state.settings_submitted:
@@ -416,15 +433,11 @@ with st.sidebar:
             st.session_state.extraction_performed = False
             st.rerun()
 
-    # ---------------------------------------------------------
-    # Mobile App Access & QR Code Component
-    # ---------------------------------------------------------
     st.markdown("---")
-    st.markdown('<div class="section-header">📱 MOBILE APP ACCESS</div>', unsafe_allow_html=True)
+    with st.expander("📱 MOBILE APP ACCESS", expanded=False):
+        qr_api_url = f"https://quickchart.io/qr?text={APP_URL}&size=140&dark=00E676&light=0B1120&margin=1"
 
-    qr_api_url = f"https://quickchart.io/qr?text={APP_URL}&size=140&dark=00E676&light=0B1120&margin=1"
-
-    mobile_card_html = f"""<div class="mobile-card">
+        mobile_card_html = f"""<div class="mobile-card">
 <div style="text-align: center; margin-bottom: 8px;">
 <img src="{qr_api_url}" style="border-radius: 8px; border: 1px solid rgba(0, 230, 118, 0.4); width: 130px; height: 130px;" alt="Killzone Mobile QR" />
 <div style="color: #64748B; font-size: 0.7rem; margin-top: 4px;">SCAN WITH PHONE CAMERA</div>
@@ -455,14 +468,16 @@ with st.sidebar:
 </div>
 </div>"""
 
-    st.markdown(mobile_card_html, unsafe_allow_html=True)
+        st.markdown(mobile_card_html, unsafe_allow_html=True)
 
 # ---------------------------------------------------------
-# Main Workspace
+# Main Workspace Header
 # ---------------------------------------------------------
 if not st.session_state.settings_submitted:
+    if os.path.exists("logo.png"):
+        st.image("logo.png", width=180)
     st.markdown("""
-    <div style="text-align: center; padding: 60px 20px;">
+    <div style="text-align: center; padding: 40px 20px;">
         <div class="killzone-title">KILLZONE</div>
         <div class="killzone-subtitle" style="margin-top: 10px;">Algorithmic Order Flow & Vision Engine</div>
         <div style="margin-top: 30px; font-family: 'JetBrains Mono', monospace; font-size: 0.85rem; color: #00E676;">
@@ -615,21 +630,53 @@ else:
                 st.write("")
                 st.markdown('<div class="section-header">2. PARAMETER VERIFICATION</div>', unsafe_allow_html=True)
 
-                st.session_state.ocr_entry = st.text_input("ENTRY PRICE", value=st.session_state.ocr_entry)
-                st.session_state.ocr_sl = st.text_input("STOP LOSS (SL)", value=st.session_state.ocr_sl)
-                st.session_state.ocr_tp1 = st.text_input("TARGET 1 (TP1)", value=st.session_state.ocr_tp1)
+                # ENTRY PRICE + COPY
+                col_e1, col_e2 = st.columns([3, 1.2])
+                with col_e1:
+                    st.session_state.ocr_entry = st.text_input("ENTRY PRICE", value=st.session_state.ocr_entry, key="input_entry")
+                with col_e2:
+                    st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True)
+                    st.code(st.session_state.ocr_entry, language=None)
 
+                # STOP LOSS (SL) + COPY
+                col_s1, col_s2 = st.columns([3, 1.2])
+                with col_s1:
+                    st.session_state.ocr_sl = st.text_input("STOP LOSS (SL)", value=st.session_state.ocr_sl, key="input_sl")
+                with col_s2:
+                    st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True)
+                    st.code(st.session_state.ocr_sl, language=None)
+
+                # TARGET 1 (TP1) + COPY
+                col_t1_1, col_t1_2 = st.columns([3, 1.2])
+                with col_t1_1:
+                    st.session_state.ocr_tp1 = st.text_input("TARGET 1 (TP1)", value=st.session_state.ocr_tp1, key="input_tp1")
+                with col_t1_2:
+                    st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True)
+                    st.code(st.session_state.ocr_tp1, language=None)
+
+                # TARGET 2 (TP2) + COPY (If Active)
                 try:
                     tp2_num = float(st.session_state.ocr_tp2)
                     if tp2_num > 0:
-                        st.session_state.ocr_tp2 = st.text_input("TARGET 2 (TP2)", value=st.session_state.ocr_tp2)
+                        col_t2_1, col_t2_2 = st.columns([3, 1.2])
+                        with col_t2_1:
+                            st.session_state.ocr_tp2 = st.text_input("TARGET 2 (TP2)", value=st.session_state.ocr_tp2, key="input_tp2")
+                        with col_t2_2:
+                            st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True)
+                            st.code(st.session_state.ocr_tp2, language=None)
                 except ValueError:
                     pass
 
+                # TARGET 3 (TP3) + COPY (If Active)
                 try:
                     tp3_num = float(st.session_state.ocr_tp3)
                     if tp3_num > 0:
-                        st.session_state.ocr_tp3 = st.text_input("TARGET 3 (TP3)", value=st.session_state.ocr_tp3)
+                        col_t3_1, col_t3_2 = st.columns([3, 1.2])
+                        with col_t3_1:
+                            st.session_state.ocr_tp3 = st.text_input("TARGET 3 (TP3)", value=st.session_state.ocr_tp3, key="input_tp3")
+                        with col_t3_2:
+                            st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True)
+                            st.code(st.session_state.ocr_tp3, language=None)
                 except ValueError:
                     pass
 
