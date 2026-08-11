@@ -5,6 +5,7 @@ import io
 import base64
 import requests
 import streamlit as st
+import streamlit.components.v1 as components
 from PIL import Image
 
 # ---------------------------------------------------------
@@ -19,14 +20,12 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Native Streamlit Top-Left Logo (if file exists)
 if os.path.exists("logo.png"):
     try:
         st.logo("logo.png")
     except Exception:
         pass
 
-# Auto-detect live app URL via request headers or fallback
 def resolve_app_url():
     try:
         if hasattr(st, "context") and hasattr(st.context, "headers"):
@@ -230,6 +229,20 @@ def format_price(val):
         return f"{num:.2f}" if num > 500 else f"{num:.5f}"
     except (ValueError, TypeError):
         return "0.00000"
+
+# Renders a single input field with an inline JS Copy button (No Duplication)
+def render_single_level_row(label, state_key, input_id):
+    col_input, col_copy = st.columns([3.6, 1.2], vertical_alignment="bottom")
+    with col_input:
+        st.session_state[state_key] = st.text_input(label, value=st.session_state[state_key], key=f"inp_{input_id}")
+    with col_copy:
+        val = st.session_state[state_key]
+        components.html(f"""
+            <button onclick="navigator.clipboard.writeText('{val}')" 
+                    style="width: 100%; height: 38px; background: rgba(0, 230, 118, 0.15); color: #00E676; border: 1px solid rgba(0, 230, 118, 0.5); border-radius: 8px; font-family: monospace; font-weight: 800; font-size: 11px; cursor: pointer;">
+                📋 COPY
+            </button>
+        """, height=42)
 
 def analyze_chart_with_ai(pil_image, asset, timeframe):
     if not GEMINI_KEY:
@@ -630,53 +643,22 @@ else:
                 st.write("")
                 st.markdown('<div class="section-header">2. PARAMETER VERIFICATION</div>', unsafe_allow_html=True)
 
-                # ENTRY PRICE + COPY
-                col_e1, col_e2 = st.columns([3, 1.2])
-                with col_e1:
-                    st.session_state.ocr_entry = st.text_input("ENTRY PRICE", value=st.session_state.ocr_entry, key="input_entry")
-                with col_e2:
-                    st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True)
-                    st.code(st.session_state.ocr_entry, language=None)
+                # Single text input with inline JS copy button (Zero Duplication)
+                render_single_level_row("ENTRY PRICE", "ocr_entry", "entry")
+                render_single_level_row("STOP LOSS (SL)", "ocr_sl", "sl")
+                render_single_level_row("TARGET 1 (TP1)", "ocr_tp1", "tp1")
 
-                # STOP LOSS (SL) + COPY
-                col_s1, col_s2 = st.columns([3, 1.2])
-                with col_s1:
-                    st.session_state.ocr_sl = st.text_input("STOP LOSS (SL)", value=st.session_state.ocr_sl, key="input_sl")
-                with col_s2:
-                    st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True)
-                    st.code(st.session_state.ocr_sl, language=None)
-
-                # TARGET 1 (TP1) + COPY
-                col_t1_1, col_t1_2 = st.columns([3, 1.2])
-                with col_t1_1:
-                    st.session_state.ocr_tp1 = st.text_input("TARGET 1 (TP1)", value=st.session_state.ocr_tp1, key="input_tp1")
-                with col_t1_2:
-                    st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True)
-                    st.code(st.session_state.ocr_tp1, language=None)
-
-                # TARGET 2 (TP2) + COPY (If Active)
                 try:
                     tp2_num = float(st.session_state.ocr_tp2)
                     if tp2_num > 0:
-                        col_t2_1, col_t2_2 = st.columns([3, 1.2])
-                        with col_t2_1:
-                            st.session_state.ocr_tp2 = st.text_input("TARGET 2 (TP2)", value=st.session_state.ocr_tp2, key="input_tp2")
-                        with col_t2_2:
-                            st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True)
-                            st.code(st.session_state.ocr_tp2, language=None)
+                        render_single_level_row("TARGET 2 (TP2)", "ocr_tp2", "tp2")
                 except ValueError:
                     pass
 
-                # TARGET 3 (TP3) + COPY (If Active)
                 try:
                     tp3_num = float(st.session_state.ocr_tp3)
                     if tp3_num > 0:
-                        col_t3_1, col_t3_2 = st.columns([3, 1.2])
-                        with col_t3_1:
-                            st.session_state.ocr_tp3 = st.text_input("TARGET 3 (TP3)", value=st.session_state.ocr_tp3, key="input_tp3")
-                        with col_t3_2:
-                            st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True)
-                            st.code(st.session_state.ocr_tp3, language=None)
+                        render_single_level_row("TARGET 3 (TP3)", "ocr_tp3", "tp3")
                 except ValueError:
                     pass
 
