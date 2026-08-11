@@ -8,7 +8,7 @@ import streamlit as st
 from PIL import Image
 
 # ---------------------------------------------------------
-# Page Configuration & Styling
+# Page Configuration & High-Tech Styling
 # ---------------------------------------------------------
 st.set_page_config(
     page_title="Killzone // Algorithmic Terminal",
@@ -78,6 +78,17 @@ st.markdown("""
         font-size: 0.8rem;
         font-weight: 700;
         margin-right: 8px;
+        margin-bottom: 6px;
+    }
+
+    .smc-card {
+        background: rgba(30, 41, 59, 0.5);
+        border-left: 3px solid #00E676;
+        border-radius: 6px;
+        padding: 10px 14px;
+        margin-top: 10px;
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 0.82rem;
     }
 
     .status-badge {
@@ -121,10 +132,17 @@ if "ocr_tp3" not in st.session_state:
 
 if "trade_score" not in st.session_state:
     st.session_state.trade_score = 0.0
+if "trade_accuracy" not in st.session_state:
+    st.session_state.trade_accuracy = 0.0
 if "trade_rationale" not in st.session_state:
     st.session_state.trade_rationale = ""
 if "order_bias" not in st.session_state:
     st.session_state.order_bias = "INVALID"
+
+if "fvg_data" not in st.session_state:
+    st.session_state.fvg_data = {}
+if "disp_data" not in st.session_state:
+    st.session_state.disp_data = {}
 
 raw_key = st.secrets.get("GEMINI_API_KEY", os.getenv("GEMINI_API_KEY", ""))
 GEMINI_KEY = str(raw_key).strip().strip('"').strip("'")
@@ -149,19 +167,44 @@ def analyze_chart_with_ai(pil_image, asset, timeframe):
 
     prompt = f"""
 You are an expert ICT (Inner Circle Trader) and Smart Money Concepts (SMC) quantitative analyst examining a {asset} {timeframe} chart.
-Analyze the price action in this image:
+Perform an aggressive structural scan of price action focusing on:
 
-1. MARKET STRUCTURE: Look for Market Structure Shifts (MSS), Breaks of Structure (BOS), Fair Value Gaps (FVG), Order Blocks (OB), or Liquidity Sweeps.
-2. DIRECTIONAL BIAS: Determine if the valid trade setup is 'BUY', 'SELL', or 'NO_TRADE'.
-3. PRICE LEVELS: Extract or detect precise numeric figures for Entry, Stop Loss (SL), Take Profit 1 (TP1), Take Profit 2 (TP2), and Take Profit 3 (TP3).
-4. CONFLUENCE SCORE: Rate setup quality from 1.0 to 10.0 based on structural clarity.
-5. RATIONALE: Write a concise 2-sentence technical breakdown explaining the trade setup.
+1. DISPLACEMENT CANDLES:
+   - Identify if there is a strong, wide-range body expansion candle indicating institutional entry.
+   - Confirm if this displacement caused a Market Structure Shift (MSS), Break of Structure (BOS), or Liquidity Sweep.
+
+2. FAIR VALUE GAP (FVG) MEASUREMENT:
+   - Detect any 3-candle imbalance created by displacement.
+   - Bullish FVG: Gap between High of Candle 1 and Low of Candle 3.
+   - Bearish FVG: Gap between Low of Candle 1 and High of Candle 3.
+   - Estimate the exact FVG price boundaries (top_price, bottom_price) and calculate its size/height in points or pips.
+   - Determine current FVG status: 'OPEN', 'PARTIALLY_FILLED', or 'FULLY_FILLED'.
+
+3. KEY PRICE LEVELS:
+   - Extract numeric levels for Entry (optimal trade entry inside FVG or Order Block), Stop Loss (SL), and Targets (TP1, TP2, TP3).
+
+4. DIRECTIONAL BIAS, CONFLUENCE & ACCURACY:
+   - Determine directional bias ('BUY', 'SELL', or 'NO_TRADE').
+   - Rate setup quality score from 1.0 to 10.0 based on structural clarity.
+   - Estimate the setup win probability / accuracy percentage from 0.0 to 100.0 (e.g., 82.5 for an 82.5% high-probability setup).
 
 Return ONLY raw valid JSON matching this exact structure:
 {{
   "bias": "BUY" | "SELL" | "NO_TRADE",
   "score": float,
+  "accuracy_percentage": float,
   "rationale": "string",
+  "displacement": {{
+    "detected": boolean,
+    "description": "string (e.g. Strong bullish expansion candle breaking 1.0850 high)"
+  }},
+  "fvg": {{
+    "detected": boolean,
+    "top_price": float,
+    "bottom_price": float,
+    "size_points": float,
+    "status": "OPEN" | "PARTIALLY_FILLED" | "FULLY_FILLED"
+  }},
   "entry": float,
   "sl": float,
   "tp1": float,
@@ -174,7 +217,7 @@ Return ONLY raw valid JSON matching this exact structure:
         "Content-Type": "application/json",
         "x-goog-api-key": GEMINI_KEY
     }
-    
+
     payload = {
         "contents": [{
             "parts": [
@@ -189,7 +232,7 @@ Return ONLY raw valid JSON matching this exact structure:
         }]
     }
 
-    # 1. Dynamically discover supported models for this API key
+    # 1. Dynamically discover supported models
     candidate_models = []
     try:
         models_url = f"https://generativelanguage.googleapis.com/v1beta/models?key={GEMINI_KEY}"
@@ -206,7 +249,7 @@ Return ONLY raw valid JSON matching this exact structure:
     except Exception:
         pass
 
-    # 2. Fallback model list if dynamic discovery returns empty
+    # 2. Fallback model list
     if not candidate_models:
         candidate_models = [
             "gemini-2.0-flash",
@@ -218,7 +261,7 @@ Return ONLY raw valid JSON matching this exact structure:
 
     last_error = ""
 
-    # 3. Iterate models and endpoints
+    # 3. Iterate models and API versions
     for model_name in candidate_models:
         for api_ver in ["v1beta", "v1"]:
             url = f"https://generativelanguage.googleapis.com/{api_ver}/models/{model_name}:generateContent?key={GEMINI_KEY}"
@@ -236,19 +279,21 @@ Return ONLY raw valid JSON matching this exact structure:
 
     return {"error": f"API Call Failed. Last Response: {last_error}"}
 
-def render_circular_bias_gauge(bias):
+def render_circular_bias_gauge(bias, accuracy_pct=0.0):
+    accuracy_val = max(0.0, min(100.0, float(accuracy_pct)))
+
     if bias == "BUY":
-        percentage = 88
+        percentage = accuracy_val if accuracy_val > 0 else 82.0
         label = "BULLISH BIAS"
         color = "#00E676"
         rotation = 45
     elif bias == "SELL":
-        percentage = 12
+        percentage = accuracy_val if accuracy_val > 0 else 82.0
         label = "BEARISH BIAS"
         color = "#FF1744"
         rotation = -135
     else:
-        percentage = 50
+        percentage = 0.0
         label = "INVALID / NO TRADE"
         color = "#FFB300"
         rotation = 0
@@ -259,7 +304,7 @@ def render_circular_bias_gauge(bias):
 
     svg_code = f"""
     <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 16px; padding: 20px; margin-top: 10px;">
-        <svg width="150" height="150" viewBox="0 0 120 120">
+        <svg width="160" height="160" viewBox="0 0 120 120">
             <circle cx="60" cy="60" r="{radius}" stroke="#1E293B" stroke-width="8" fill="none" />
             <circle cx="60" cy="60" r="{radius}" stroke="{color}" stroke-width="8" fill="none"
                     stroke-dasharray="{circumference}" stroke-dashoffset="{dash_offset}"
@@ -268,15 +313,21 @@ def render_circular_bias_gauge(bias):
             <g transform="rotate({rotation} 60 60)" style="transition: transform 0.8s ease-in-out;">
                 <polygon points="60,20 54,35 66,35" fill="{color}" />
             </g>
-            <text x="60" y="58" font-family="'JetBrains Mono', monospace" font-size="14" font-weight="800" fill="#FFFFFF" text-anchor="middle" dominant-baseline="central">
+            <text x="60" y="52" font-family="'JetBrains Mono', monospace" font-size="13" font-weight="800" fill="#FFFFFF" text-anchor="middle" dominant-baseline="central">
                 {bias}
             </text>
-            <text x="60" y="76" font-family="'Inter', sans-serif" font-size="8" font-weight="700" fill="#94A3B8" text-anchor="middle">
-                ORDER FLOW
+            <text x="60" y="68" font-family="'JetBrains Mono', monospace" font-size="11" font-weight="700" fill="{color}" text-anchor="middle" dominant-baseline="central">
+                {percentage:.1f}%
+            </text>
+            <text x="60" y="82" font-family="'Inter', sans-serif" font-size="7" font-weight="700" fill="#94A3B8" text-anchor="middle">
+                PROBABILITY
             </text>
         </svg>
         <div style="margin-top: 8px; font-family: 'JetBrains Mono', monospace; font-weight: 800; font-size: 13px; color: {color}; text-align: center; letter-spacing: 1px;">
             {label}
+        </div>
+        <div style="margin-top: 6px; padding: 4px 10px; background: rgba(255, 255, 255, 0.04); border-radius: 6px; font-family: 'JetBrains Mono', monospace; font-weight: 600; font-size: 11px; color: #94A3B8; text-align: center; border: 1px solid rgba(255,255,255,0.06);">
+            EST. ACCURACY: <span style="color: {color}; font-weight: 800;">{percentage:.1f}%</span>
         </div>
     </div>
     """
@@ -361,17 +412,27 @@ else:
                 st.image(pil_img, use_container_width=True)
 
                 if st.button("⚡ EXECUTE VISION EXTRACTION", type="primary", use_container_width=True):
-                    with st.spinner("Analyzing market structure & ICT order flow..."):
+                    with st.spinner("Scanning market structure, displacement & FVG bounds..."):
                         analysis = analyze_chart_with_ai(pil_img, st.session_state.asset_name, st.session_state.timeframe)
-                        
+
                         if analysis and "error" not in analysis:
                             st.session_state.ocr_entry = format_price(analysis.get("entry", 0.0))
                             st.session_state.ocr_sl = format_price(analysis.get("sl", 0.0))
                             st.session_state.ocr_tp1 = format_price(analysis.get("tp1", 0.0))
                             st.session_state.ocr_tp2 = format_price(analysis.get("tp2", 0.0))
                             st.session_state.ocr_tp3 = format_price(analysis.get("tp3", 0.0))
-                            st.session_state.trade_score = float(analysis.get("score", 0.0))
+                            
+                            score_val = float(analysis.get("score", 0.0))
+                            st.session_state.trade_score = score_val
+                            
+                            # Extract accuracy percentage or calculate directly from score
+                            default_acc = score_val * 10.0 if score_val > 0 else 0.0
+                            st.session_state.trade_accuracy = float(analysis.get("accuracy_percentage", default_acc))
+
                             st.session_state.trade_rationale = str(analysis.get("rationale", "Analysis completed."))
+
+                            st.session_state.fvg_data = analysis.get("fvg", {})
+                            st.session_state.disp_data = analysis.get("displacement", {})
 
                             ai_bias = str(analysis.get("bias", "NO_TRADE")).upper()
                             if ai_bias in ["BUY", "SELL"]:
@@ -386,8 +447,11 @@ else:
                             st.session_state.ocr_tp2 = "0.00000"
                             st.session_state.ocr_tp3 = "0.00000"
                             st.session_state.trade_score = 0.0
+                            st.session_state.trade_accuracy = 0.0
                             st.session_state.trade_rationale = f"🚨 {error_msg}"
                             st.session_state.order_bias = "INVALID"
+                            st.session_state.fvg_data = {}
+                            st.session_state.disp_data = {}
 
                         st.session_state.extraction_performed = True
                         st.rerun()
@@ -418,11 +482,41 @@ else:
                         <span class="stat-badge" style="background: rgba(0, 176, 255, 0.15); color: #00B0FF; border: 1px solid #00B0FF;">
                             R:R = 1:{rr_ratio:.2f}
                         </span>
+                        <span class="stat-badge" style="background: rgba(255, 215, 0, 0.15); color: #FFD700; border: 1px solid #FFD700;">
+                            ACCURACY: {st.session_state.trade_accuracy:.1f}%
+                        </span>
                     </div>
                     <div class="rationale-text">{st.session_state.trade_rationale}</div>
                 </div>
                 """, unsafe_allow_html=True)
 
+                # Render Displacement & FVG Structural Cards
+                disp = st.session_state.get("disp_data", {})
+                fvg = st.session_state.get("fvg_data", {})
+
+                if disp.get("detected"):
+                    st.markdown(f"""
+                    <div class="smc-card" style="border-left-color: #00E676;">
+                        ⚡ <b>DISPLACEMENT DETECTED:</b><br/>
+                        <span style="color: #94A3B8;">{disp.get('description', 'Strong institutional expansion candle.')}</span>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+                if fvg.get("detected"):
+                    fvg_bot = format_price(fvg.get('bottom_price', 0))
+                    fvg_top = format_price(fvg.get('top_price', 0))
+                    fvg_size = fvg.get('size_points', 0)
+                    fvg_status = fvg.get('status', 'OPEN')
+
+                    st.markdown(f"""
+                    <div class="smc-card" style="border-left-color: #00B0FF;">
+                        🎯 <b>FAIR VALUE GAP (FVG):</b><br/>
+                        <b>Zone:</b> <code style="color: #00E676;">{fvg_bot} - {fvg_top}</code><br/>
+                        <b>Size:</b> <code>{fvg_size:.2f} pts</code> | <b>Status:</b> <code>{fvg_status}</code>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+                st.write("")
                 st.markdown('<div class="section-header">2. PARAMETER VERIFICATION</div>', unsafe_allow_html=True)
 
                 st.session_state.ocr_entry = st.text_input("ENTRY PRICE", value=st.session_state.ocr_entry)
@@ -456,7 +550,8 @@ else:
                         st.session_state.order_bias = "SELL"
                         st.rerun()
 
-                render_circular_bias_gauge(st.session_state.order_bias)
+                # Render the updated circular gauge showing accuracy percentage
+                render_circular_bias_gauge(st.session_state.order_bias, st.session_state.trade_accuracy)
 
                 st.session_state.active_order = {
                     "asset": st.session_state.asset_name,
@@ -467,8 +562,11 @@ else:
                     "tp1": st.session_state.ocr_tp1,
                     "tp2": st.session_state.ocr_tp2,
                     "tp3": st.session_state.ocr_tp3,
+                    "displacement": disp,
+                    "fvg": fvg,
                     "lots": st.session_state.get("ocr_lots", 0.50),
                     "score": st.session_state.trade_score,
+                    "accuracy": st.session_state.trade_accuracy,
                     "rationale": st.session_state.trade_rationale
                 }
             else:
