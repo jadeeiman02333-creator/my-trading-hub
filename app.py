@@ -2,6 +2,8 @@ import os
 import json
 import re
 import io
+import base64
+import requests
 import streamlit as st
 from PIL import Image
 
@@ -14,12 +16,6 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded"
 )
-
-# Modern Google Gen AI SDK
-try:
-    from google import genai
-except ImportError:
-    genai = None
 
 st.markdown("""
 <style>
@@ -142,6 +138,14 @@ def format_price(val):
         return "0.00000"
 
 def analyze_chart_with_ai(pil_image, asset, timeframe):
+    if not GEMINI_KEY:
+        return {"error": "GEMINI_API_KEY missing in Streamlit Secrets. Add it under App Settings -> Secrets."}
+
+    # Convert image to Base64 string
+    buffered = io.BytesIO()
+    pil_image.save(buffered, format="PNG")
+    img_b64 = base64.b64encode(buffered.getvalue()).decode("utf-8")
+
     prompt = f"""
 You are an expert ICT (Inner Circle Trader) and Smart Money Concepts (SMC) quantitative analyst examining a {asset} {timeframe} chart.
 Analyze the price action in this image:
@@ -152,7 +156,7 @@ Analyze the price action in this image:
 4. CONFLUENCE SCORE: Rate setup quality from 1.0 to 10.0 based on structural clarity.
 5. RATIONALE: Write a concise 2-sentence technical breakdown explaining the trade setup.
 
-Return ONLY raw valid JSON in this exact structure:
+Return ONLY raw valid JSON matching this exact structure:
 {{
   "bias": "BUY" | "SELL" | "NO_TRADE",
   "score": float,
@@ -165,36 +169,39 @@ Return ONLY raw valid JSON in this exact structure:
 }}
 """
 
-    if not GEMINI_KEY:
-        return {"error": "GEMINI_API_KEY missing in Streamlit Secrets. Add it under App Settings -> Secrets."}
-
-    if not genai:
-        return {"error": "'google-genai' package is not installed. Ensure 'google-genai' is listed in requirements.txt."}
-
     candidate_models = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"]
     last_error = ""
 
-    # Test v1 stable endpoint first, then v1beta as fallback
-    for api_ver in ["v1", "v1beta"]:
-        try:
-            client = genai.Client(api_key=GEMINI_KEY, http_options={"api_version": api_ver})
-            for model_name in candidate_models:
-                try:
-                    res = client.models.generate_content(
-                        model=model_name,
-                        contents=[prompt, pil_image]
-                    )
-                    raw_text = res.text.strip()
-                    clean_text = re.sub(r'```(?:json)?', '', raw_text).replace('```', '').strip()
-                    return json.loads(clean_text)
-                except Exception as e:
-                    last_error = f"[{model_name} @ {api_ver}]: {str(e)}"
-                    continue
-        except Exception as e:
-            last_error = f"Client Init [{api_ver}]: {str(e)}"
-            continue
+    for model_name in candidate_models:
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={GEMINI_KEY}"
+        headers = {"Content-Type": "application/json"}
+        payload = {
+            "contents": [{
+                "parts": [
+                    {"text": prompt},
+                    {
+                        "inline_data": {
+                            "mime_type": "image/png",
+                            "data": img_b64
+                        }
+                    }
+                ]
+            }]
+        }
 
-    return {"error": f"All Gemini models failed. Last error: {last_error}"}
+        try:
+            response = requests.post(url, headers=headers, json=payload, timeout=30)
+            if response.status_code == 200:
+                res_data = response.json()
+                raw_text = res_data['candidates'][0]['content']['parts'][0]['text']
+                clean_text = re.sub(r'```(?:json)?', '', raw_text).replace('```', '').strip()
+                return json.loads(clean_text)
+            else:
+                last_error = f"[{model_name}] HTTP {response.status_code}: {response.text}"
+        except Exception as e:
+            last_error = f"[{model_name}] Request Exception: {str(e)}"
+
+    return {"error": f"API Call Failed. Reason: {last_error}"}
 
 def render_circular_bias_gauge(bias):
     if bias == "BUY":
