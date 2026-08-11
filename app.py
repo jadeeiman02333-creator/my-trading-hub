@@ -8,7 +8,7 @@ import streamlit as st
 from PIL import Image
 
 # ---------------------------------------------------------
-# Page Configuration & High-Tech Styling
+# Page Configuration & Styling
 # ---------------------------------------------------------
 st.set_page_config(
     page_title="Killzone // Algorithmic Terminal",
@@ -141,7 +141,7 @@ def analyze_chart_with_ai(pil_image, asset, timeframe):
     if not GEMINI_KEY:
         return {"error": "GEMINI_API_KEY missing in Streamlit Secrets. Add it under App Settings -> Secrets."}
 
-    # Convert image to Base64 string
+    # Convert image to Base64
     buffered = io.BytesIO()
     pil_image.save(buffered, format="PNG")
     img_b64 = base64.b64encode(buffered.getvalue()).decode("utf-8")
@@ -169,26 +169,31 @@ Return ONLY raw valid JSON matching this exact structure:
 }}
 """
 
-    candidate_models = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"]
+    headers = {"Content-Type": "application/json"}
+    payload = {
+        "contents": [{
+            "parts": [
+                {"text": prompt},
+                {
+                    "inline_data": {
+                        "mime_type": "image/png",
+                        "data": img_b64
+                    }
+                }
+            ]
+        }]
+    }
+
+    # Endpoint matrix to guarantee execution
+    endpoints = [
+        f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={GEMINI_KEY}",
+        f"https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key={GEMINI_KEY}",
+        f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_KEY}"
+    ]
+
     last_error = ""
 
-    for model_name in candidate_models:
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={GEMINI_KEY}"
-        headers = {"Content-Type": "application/json"}
-        payload = {
-            "contents": [{
-                "parts": [
-                    {"text": prompt},
-                    {
-                        "inline_data": {
-                            "mime_type": "image/png",
-                            "data": img_b64
-                        }
-                    }
-                ]
-            }]
-        }
-
+    for url in endpoints:
         try:
             response = requests.post(url, headers=headers, json=payload, timeout=30)
             if response.status_code == 200:
@@ -197,11 +202,11 @@ Return ONLY raw valid JSON matching this exact structure:
                 clean_text = re.sub(r'```(?:json)?', '', raw_text).replace('```', '').strip()
                 return json.loads(clean_text)
             else:
-                last_error = f"[{model_name}] HTTP {response.status_code}: {response.text}"
+                last_error = f"HTTP {response.status_code}: {response.text}"
         except Exception as e:
-            last_error = f"[{model_name}] Request Exception: {str(e)}"
+            last_error = f"Request Exception: {str(e)}"
 
-    return {"error": f"API Call Failed. Reason: {last_error}"}
+    return {"error": f"API Call Failed. Last Response: {last_error}"}
 
 def render_circular_bias_gauge(bias):
     if bias == "BUY":
