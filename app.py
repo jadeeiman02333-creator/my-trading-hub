@@ -91,6 +91,45 @@ st.markdown("""
         font-size: 0.82rem;
     }
 
+    .mobile-card {
+        background: rgba(15, 23, 42, 0.8);
+        border: 1px solid rgba(0, 230, 118, 0.25);
+        border-radius: 10px;
+        padding: 12px;
+        margin-top: 10px;
+        font-family: 'JetBrains Mono', monospace;
+    }
+
+    .mobile-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 8px;
+        font-size: 0.78rem;
+    }
+
+    .mobile-table td {
+        padding: 6px 4px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    }
+
+    .mobile-btn {
+        display: block;
+        text-align: center;
+        background: rgba(0, 230, 118, 0.12);
+        color: #00E676;
+        border: 1px solid rgba(0, 230, 118, 0.4);
+        padding: 6px 10px;
+        border-radius: 6px;
+        text-decoration: none;
+        font-weight: 700;
+        font-size: 0.75rem;
+    }
+
+    .mobile-btn:hover {
+        background: rgba(0, 230, 118, 0.25);
+        color: #FFFFFF;
+    }
+
     .status-badge {
         display: inline-flex;
         align-items: center;
@@ -359,6 +398,50 @@ with st.sidebar:
             st.session_state.extraction_performed = False
             st.rerun()
 
+    # ---------------------------------------------------------
+    # Mobile App & Web App Download Table Component
+    # ---------------------------------------------------------
+    st.markdown("---")
+    st.markdown('<div class="section-header">📱 MOBILE APP ACCESS</div>', unsafe_allow_html=True)
+
+    # Dynamic QR Code based on current Streamlit URL
+    app_url = "https://share.streamlit.io"
+    qr_code_url = f"https://quickchart.io/qr?text={app_url}&size=140&dark=00E676&light=0B1120&margin=1"
+
+    st.markdown(f"""
+    <div class="mobile-card">
+        <div style="text-align: center; margin-bottom: 8px;">
+            <img src="{qr_code_url}" style="border-radius: 8px; border: 1px solid rgba(0, 230, 118, 0.3); width: 130px; height: 130px;" alt="Killzone Mobile QR" />
+            <div style="color: #64748B; font-size: 0.7rem; margin-top: 4px;">SCAN WITH PHONE CAMERA</div>
+        </div>
+
+        <table class="mobile-table">
+            <thead>
+                <tr style="color: #00E676; border-bottom: 1px solid rgba(0, 230, 118, 0.3);">
+                    <th style="text-align: left; padding-bottom: 4px;">OS</th>
+                    <th style="text-align: left; padding-bottom: 4px;">INSTALL METHOD</th>
+                    <th style="text-align: right; padding-bottom: 4px;">ACTION</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td style="color: #FFFFFF; font-weight: 700;">🍎 iOS</td>
+                    <td style="color: #CBD5E1;">Safari ➔ Share ➔ Add to Home Screen</td>
+                    <td style="text-align: right;"><a href="{app_url}" target="_blank" class="mobile-btn">SAVE PWA</a></td>
+                </tr>
+                <tr>
+                    <td style="color: #FFFFFF; font-weight: 700;">🤖 Android</td>
+                    <td style="color: #CBD5E1;">Chrome ➔ ⁝ ➔ Install App / APK</td>
+                    <td style="text-align: right;"><a href="{app_url}" target="_blank" class="mobile-btn">INSTALL</a></td>
+                </tr>
+            </tbody>
+        </table>
+        <div style="font-size: 0.7rem; color: #64748B; margin-top: 8px; line-height: 1.3;">
+            💡 <b>Tip:</b> Installing as a Progressive Web App (PWA) enables full-screen execution and camera screenshot ingestion directly on mobile.
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
 # ---------------------------------------------------------
 # Main Workspace
 # ---------------------------------------------------------
@@ -425,7 +508,6 @@ else:
                             score_val = float(analysis.get("score", 0.0))
                             st.session_state.trade_score = score_val
                             
-                            # Extract accuracy percentage or calculate directly from score
                             default_acc = score_val * 10.0 if score_val > 0 else 0.0
                             st.session_state.trade_accuracy = float(analysis.get("accuracy_percentage", default_acc))
 
@@ -550,7 +632,6 @@ else:
                         st.session_state.order_bias = "SELL"
                         st.rerun()
 
-                # Render the updated circular gauge showing accuracy percentage
                 render_circular_bias_gauge(st.session_state.order_bias, st.session_state.trade_accuracy)
 
                 st.session_state.active_order = {
