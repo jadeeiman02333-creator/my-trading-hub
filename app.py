@@ -154,11 +154,6 @@ st.markdown("""
         font-size: 0.72rem;
     }
 
-    .mobile-btn:hover {
-        background: rgba(0, 230, 118, 0.3);
-        color: #FFFFFF !important;
-    }
-
     .status-badge {
         display: inline-flex;
         align-items: center;
@@ -230,19 +225,27 @@ def format_price(val):
     except (ValueError, TypeError):
         return "0.00000"
 
-# Renders a single input field with an inline JS Copy button (No Duplication)
-def render_single_level_row(label, state_key, input_id):
-    col_input, col_copy = st.columns([3.6, 1.2], vertical_alignment="bottom")
-    with col_input:
-        st.session_state[state_key] = st.text_input(label, value=st.session_state[state_key], key=f"inp_{input_id}")
-    with col_copy:
-        val = st.session_state[state_key]
-        components.html(f"""
-            <button onclick="navigator.clipboard.writeText('{val}')" 
-                    style="width: 100%; height: 38px; background: rgba(0, 230, 118, 0.15); color: #00E676; border: 1px solid rgba(0, 230, 118, 0.5); border-radius: 8px; font-family: monospace; font-weight: 800; font-size: 11px; cursor: pointer;">
-                📋 COPY
+# Component: Renders input box with copy button embedded INSIDE the right side
+def render_embedded_copy_input(label, state_key, input_id):
+    val = st.session_state.get(state_key, "0.00000")
+    
+    html_code = f"""
+    <div style="font-family: 'JetBrains Mono', monospace; margin-bottom: 8px;">
+        <label style="display: block; font-size: 11px; font-weight: 700; color: #94A3B8; margin-bottom: 4px; letter-spacing: 0.5px;">
+            {label}
+        </label>
+        <div style="position: relative; display: flex; align-items: center;">
+            <input type="text" id="field_{input_id}" value="{val}" readonly
+                   style="width: 100%; height: 42px; background: rgba(15, 23, 42, 0.9); color: #00E676; border: 1px solid rgba(0, 230, 118, 0.35); border-radius: 8px; padding: 0 45px 0 12px; font-family: monospace; font-size: 14px; font-weight: 700; outline: none; box-sizing: border-box;" />
+            <button onclick="navigator.clipboard.writeText(document.getElementById('field_{input_id}').value); this.innerText='✓'; setTimeout(() => this.innerText='📋', 1200);"
+                    title="Copy Price"
+                    style="position: absolute; right: 6px; top: 6px; bottom: 6px; width: 34px; background: rgba(0, 230, 118, 0.15); color: #00E676; border: 1px solid rgba(0, 230, 118, 0.4); border-radius: 6px; cursor: pointer; font-size: 13px; display: flex; align-items: center; justify-content: center; transition: all 0.2s;">
+                📋
             </button>
-        """, height=42)
+        </div>
+    </div>
+    """
+    components.html(html_code, height=72)
 
 def analyze_chart_with_ai(pil_image, asset, timeframe):
     if not GEMINI_KEY:
@@ -643,22 +646,22 @@ else:
                 st.write("")
                 st.markdown('<div class="section-header">2. PARAMETER VERIFICATION</div>', unsafe_allow_html=True)
 
-                # Single text input with inline JS copy button (Zero Duplication)
-                render_single_level_row("ENTRY PRICE", "ocr_entry", "entry")
-                render_single_level_row("STOP LOSS (SL)", "ocr_sl", "sl")
-                render_single_level_row("TARGET 1 (TP1)", "ocr_tp1", "tp1")
+                # Render fields with copy buttons inside the right edge of each input box
+                render_embedded_copy_input("ENTRY PRICE", "ocr_entry", "entry")
+                render_embedded_copy_input("STOP LOSS (SL)", "ocr_sl", "sl")
+                render_embedded_copy_input("TARGET 1 (TP1)", "ocr_tp1", "tp1")
 
                 try:
                     tp2_num = float(st.session_state.ocr_tp2)
                     if tp2_num > 0:
-                        render_single_level_row("TARGET 2 (TP2)", "ocr_tp2", "tp2")
+                        render_embedded_copy_input("TARGET 2 (TP2)", "ocr_tp2", "tp2")
                 except ValueError:
                     pass
 
                 try:
                     tp3_num = float(st.session_state.ocr_tp3)
                     if tp3_num > 0:
-                        render_single_level_row("TARGET 3 (TP3)", "ocr_tp3", "tp3")
+                        render_embedded_copy_input("TARGET 3 (TP3)", "ocr_tp3", "tp3")
                 except ValueError:
                     pass
 
