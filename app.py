@@ -17,6 +17,20 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
+# Auto-detect live app URL via request headers or fallback
+def resolve_app_url():
+    try:
+        if hasattr(st, "context") and hasattr(st.context, "headers"):
+            host = st.context.headers.get("host") or st.context.headers.get("Host")
+            if host:
+                scheme = "http" if ("localhost" in host or "127.0.0.1" in host) else "https"
+                return f"{scheme}://{host}"
+    except Exception:
+        pass
+    return "https://killzone-terminal.streamlit.app"
+
+APP_URL = resolve_app_url()
+
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700;800&family=Inter:wght@300;400;600;700&display=swap');
@@ -92,10 +106,10 @@ st.markdown("""
     }
 
     .mobile-card {
-        background: rgba(15, 23, 42, 0.8);
-        border: 1px solid rgba(0, 230, 118, 0.25);
-        border-radius: 10px;
-        padding: 12px;
+        background: rgba(15, 23, 42, 0.85);
+        border: 1px solid rgba(0, 230, 118, 0.3);
+        border-radius: 12px;
+        padding: 14px;
         margin-top: 10px;
         font-family: 'JetBrains Mono', monospace;
     }
@@ -103,31 +117,39 @@ st.markdown("""
     .mobile-table {
         width: 100%;
         border-collapse: collapse;
-        margin-top: 8px;
-        font-size: 0.78rem;
-    }
-
-    .mobile-table td {
-        padding: 6px 4px;
-        border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-    }
-
-    .mobile-btn {
-        display: block;
-        text-align: center;
-        background: rgba(0, 230, 118, 0.12);
-        color: #00E676;
-        border: 1px solid rgba(0, 230, 118, 0.4);
-        padding: 6px 10px;
-        border-radius: 6px;
-        text-decoration: none;
-        font-weight: 700;
+        margin-top: 10px;
         font-size: 0.75rem;
     }
 
+    .mobile-table th {
+        color: #00E676;
+        border-bottom: 1px solid rgba(0, 230, 118, 0.3);
+        padding-bottom: 6px;
+        text-align: left;
+    }
+
+    .mobile-table td {
+        padding: 8px 2px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+        vertical-align: middle;
+    }
+
+    .mobile-btn {
+        display: inline-block;
+        text-align: center;
+        background: rgba(0, 230, 118, 0.15);
+        color: #00E676 !important;
+        border: 1px solid rgba(0, 230, 118, 0.5);
+        padding: 5px 8px;
+        border-radius: 6px;
+        text-decoration: none !important;
+        font-weight: 700;
+        font-size: 0.72rem;
+    }
+
     .mobile-btn:hover {
-        background: rgba(0, 230, 118, 0.25);
-        color: #FFFFFF;
+        background: rgba(0, 230, 118, 0.3);
+        color: #FFFFFF !important;
     }
 
     .status-badge {
@@ -199,7 +221,6 @@ def analyze_chart_with_ai(pil_image, asset, timeframe):
     if not GEMINI_KEY:
         return {"error": "GEMINI_API_KEY missing in Streamlit Secrets. Go to App Settings -> Secrets to add it."}
 
-    # Convert image to Base64
     buffered = io.BytesIO()
     pil_image.save(buffered, format="PNG")
     img_b64 = base64.b64encode(buffered.getvalue()).decode("utf-8")
@@ -271,7 +292,6 @@ Return ONLY raw valid JSON matching this exact structure:
         }]
     }
 
-    # 1. Dynamically discover supported models
     candidate_models = []
     try:
         models_url = f"https://generativelanguage.googleapis.com/v1beta/models?key={GEMINI_KEY}"
@@ -288,7 +308,6 @@ Return ONLY raw valid JSON matching this exact structure:
     except Exception:
         pass
 
-    # 2. Fallback model list
     if not candidate_models:
         candidate_models = [
             "gemini-2.0-flash",
@@ -300,7 +319,6 @@ Return ONLY raw valid JSON matching this exact structure:
 
     last_error = ""
 
-    # 3. Iterate models and API versions
     for model_name in candidate_models:
         for api_ver in ["v1beta", "v1"]:
             url = f"https://generativelanguage.googleapis.com/{api_ver}/models/{model_name}:generateContent?key={GEMINI_KEY}"
@@ -399,48 +417,45 @@ with st.sidebar:
             st.rerun()
 
     # ---------------------------------------------------------
-    # Mobile App & Web App Download Table Component
+    # Mobile App Access & QR Code Component
     # ---------------------------------------------------------
     st.markdown("---")
     st.markdown('<div class="section-header">📱 MOBILE APP ACCESS</div>', unsafe_allow_html=True)
 
-    # Dynamic QR Code based on current Streamlit URL
-    app_url = "https://share.streamlit.io"
-    qr_code_url = f"https://quickchart.io/qr?text={app_url}&size=140&dark=00E676&light=0B1120&margin=1"
+    qr_api_url = f"https://quickchart.io/qr?text={APP_URL}&size=140&dark=00E676&light=0B1120&margin=1"
 
-    st.markdown(f"""
-    <div class="mobile-card">
-        <div style="text-align: center; margin-bottom: 8px;">
-            <img src="{qr_code_url}" style="border-radius: 8px; border: 1px solid rgba(0, 230, 118, 0.3); width: 130px; height: 130px;" alt="Killzone Mobile QR" />
-            <div style="color: #64748B; font-size: 0.7rem; margin-top: 4px;">SCAN WITH PHONE CAMERA</div>
-        </div>
+    mobile_card_html = f"""<div class="mobile-card">
+<div style="text-align: center; margin-bottom: 8px;">
+<img src="{qr_api_url}" style="border-radius: 8px; border: 1px solid rgba(0, 230, 118, 0.4); width: 130px; height: 130px;" alt="Killzone Mobile QR" />
+<div style="color: #64748B; font-size: 0.7rem; margin-top: 4px;">SCAN WITH PHONE CAMERA</div>
+</div>
+<table class="mobile-table">
+<thead>
+<tr>
+<th>OS</th>
+<th>INSTALL METHOD</th>
+<th style="text-align: right;">ACTION</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="color: #FFFFFF; font-weight: 700;">🍎 iOS</td>
+<td style="color: #CBD5E1;">Safari ➔ Share ➔ Add to Home Screen</td>
+<td style="text-align: right;"><a href="{APP_URL}" target="_blank" class="mobile-btn">OPEN APP</a></td>
+</tr>
+<tr>
+<td style="color: #FFFFFF; font-weight: 700;">🤖 Android</td>
+<td style="color: #CBD5E1;">Chrome ➔ ⁝ ➔ Install App / Add to Screen</td>
+<td style="text-align: right;"><a href="{APP_URL}" target="_blank" class="mobile-btn">OPEN APP</a></td>
+</tr>
+</tbody>
+</table>
+<div style="font-size: 0.7rem; color: #64748B; margin-top: 8px; line-height: 1.3;">
+💡 <b>Tip:</b> Open the link on mobile and select <b>Add to Home Screen</b> to install Killzone as a standalone app icon.
+</div>
+</div>"""
 
-        <table class="mobile-table">
-            <thead>
-                <tr style="color: #00E676; border-bottom: 1px solid rgba(0, 230, 118, 0.3);">
-                    <th style="text-align: left; padding-bottom: 4px;">OS</th>
-                    <th style="text-align: left; padding-bottom: 4px;">INSTALL METHOD</th>
-                    <th style="text-align: right; padding-bottom: 4px;">ACTION</th>
-                </tr>
-            </thead>
-            <tbody>
-                <tr>
-                    <td style="color: #FFFFFF; font-weight: 700;">🍎 iOS</td>
-                    <td style="color: #CBD5E1;">Safari ➔ Share ➔ Add to Home Screen</td>
-                    <td style="text-align: right;"><a href="{app_url}" target="_blank" class="mobile-btn">SAVE PWA</a></td>
-                </tr>
-                <tr>
-                    <td style="color: #FFFFFF; font-weight: 700;">🤖 Android</td>
-                    <td style="color: #CBD5E1;">Chrome ➔ ⁝ ➔ Install App / APK</td>
-                    <td style="text-align: right;"><a href="{app_url}" target="_blank" class="mobile-btn">INSTALL</a></td>
-                </tr>
-            </tbody>
-        </table>
-        <div style="font-size: 0.7rem; color: #64748B; margin-top: 8px; line-height: 1.3;">
-            💡 <b>Tip:</b> Installing as a Progressive Web App (PWA) enables full-screen execution and camera screenshot ingestion directly on mobile.
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
+    st.markdown(mobile_card_html, unsafe_allow_html=True)
 
 # ---------------------------------------------------------
 # Main Workspace
@@ -572,7 +587,6 @@ else:
                 </div>
                 """, unsafe_allow_html=True)
 
-                # Render Displacement & FVG Structural Cards
                 disp = st.session_state.get("disp_data", {})
                 fvg = st.session_state.get("fvg_data", {})
 
