@@ -225,6 +225,7 @@ def format_price(val):
     except (ValueError, TypeError):
         return "0.00000"
 
+# Component: Renders input box with copy button embedded INSIDE the right side
 def render_embedded_copy_input(label, state_key, input_id):
     val = st.session_state.get(state_key, "0.00000")
     
@@ -246,19 +247,16 @@ def render_embedded_copy_input(label, state_key, input_id):
     """
     components.html(html_code, height=72)
 
-def analyze_chart_with_ai(pil_image, asset, timeframe):
+def analyze_chart_with_ai(pil_images, asset, timeframe):
     if not GEMINI_KEY:
         return {"error": "GEMINI_API_KEY missing in Streamlit Secrets. Go to App Settings -> Secrets to add it."}
 
-    buffered = io.BytesIO()
-    pil_image.save(buffered, format="PNG")
-    img_b64 = base64.b64encode(buffered.getvalue()).decode("utf-8")
-
     prompt = f"""
-You are an elite ICT (Inner Circle Trader) and Smart Money Concepts (SMC) quantitative analyst examining a {asset} {timeframe} chart.
-Perform a strict structural scan using institutional ICT non-negotiable filter rules:
+You are an elite ICT (Inner Circle Trader) and Smart Money Concepts (SMC) quantitative analyst examining the provided {asset} {timeframe} chart screenshot(s) (Higher Timeframe and/or Lower Timeframe).
+Perform a strict multi-timeframe structural scan using institutional ICT non-negotiable filter rules:
 
-1. LIQUIDITY SWEEP & DISPLACEMENT (NON-NEGOTIABLE):
+1. HIGHER TIMEFRAME CONTEXT & LIQUIDITY SWEEP:
+   - Align execution with HTF bias (where market gravity/liquidity lies).
    - Check if price swept Buy-Side Liquidity (BSL) or Sell-Side Liquidity (SSL) prior to momentum shift.
    - Look for wide-range displacement body expansion candles breaking Market Structure (MSS / BOS).
    - MANDATORY INVALIDATION: If price is consolidating, in mid-range chop, or lacks a clear liquidity sweep preceding displacement, you MUST set "bias": "NO_TRADE", "score": 0.0, "accuracy_percentage": 0.0, and explain the lack of institutional sponsorship in "rationale".
@@ -300,6 +298,20 @@ Return ONLY raw valid JSON matching this exact structure:
 }}
 """
 
+    parts = [{"text": prompt}]
+
+    for idx, img in enumerate(pil_images):
+        buffered = io.BytesIO()
+        img.save(buffered, format="PNG")
+        img_b64 = base64.b64encode(buffered.getvalue()).decode("utf-8")
+        parts.append({"text": f"Chart Screenshot #{idx + 1}:"})
+        parts.append({
+            "inline_data": {
+                "mime_type": "image/png",
+                "data": img_b64
+            }
+        })
+
     headers = {
         "Content-Type": "application/json",
         "x-goog-api-key": GEMINI_KEY
@@ -307,15 +319,7 @@ Return ONLY raw valid JSON matching this exact structure:
 
     payload = {
         "contents": [{
-            "parts": [
-                {"text": prompt},
-                {
-                    "inline_data": {
-                        "mime_type": "image/png",
-                        "data": img_b64
-                    }
-                }
-            ]
+            "parts": parts
         }]
     }
 
@@ -526,20 +530,24 @@ else:
             def reset_extraction_state():
                 st.session_state.extraction_performed = False
 
-            ocr_file = st.file_uploader(
-                "Upload MT5 / TradingView Chart",
+            ocr_files = st.file_uploader(
+                "Upload MT5 / TradingView Charts (HTF & LTF)",
                 type=["png", "jpg", "jpeg"],
+                accept_multiple_files=True,
                 key="ocr_uploader",
                 on_change=reset_extraction_state
             )
 
-            if ocr_file is not None:
-                pil_img = Image.open(ocr_file)
-                st.image(pil_img, use_container_width=True)
+            if ocr_files:
+                pil_images = []
+                for idx, uploaded_file in enumerate(ocr_files):
+                    img = Image.open(uploaded_file)
+                    pil_images.append(img)
+                    st.image(img, caption=f"Chart #{idx + 1}: {uploaded_file.name}", use_container_width=True)
 
                 if st.button("⚡ EXECUTE VISION EXTRACTION", type="primary", use_container_width=True):
-                    with st.spinner("Scanning market structure, displacement & FVG bounds..."):
-                        analysis = analyze_chart_with_ai(pil_img, st.session_state.asset_name, st.session_state.timeframe)
+                    with st.spinner(f"Scanning market structure across {len(pil_images)} uploaded chart(s)..."):
+                        analysis = analyze_chart_with_ai(pil_images, st.session_state.asset_name, st.session_state.timeframe)
 
                         if analysis and "error" not in analysis:
                             st.session_state.ocr_entry = format_price(analysis.get("entry", 0.0))
@@ -582,7 +590,7 @@ else:
                         st.rerun()
 
         with col_scan_right:
-            if ocr_file is not None and st.session_state.extraction_performed:
+            if ocr_files and st.session_state.extraction_performed:
                 st.markdown('<div class="section-header">ICT ANALYSIS & CONFLUENCE</div>', unsafe_allow_html=True)
 
                 try:
@@ -701,7 +709,7 @@ else:
                     "rationale": st.session_state.trade_rationale
                 }
             else:
-                st.info("💡 Upload a chart screenshot on the left and click 'EXECUTE VISION EXTRACTION' to analyze market structure and parameters.")
+                st.info("💡 Upload one or more chart screenshots on the left (e.g. H4 + M15) and click 'EXECUTE VISION EXTRACTION' to analyze market structure across timeframes.")
 
     with tabs[1]:
         order = st.session_state.get("active_order", {})
