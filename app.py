@@ -225,7 +225,6 @@ def format_price(val):
     except (ValueError, TypeError):
         return "0.00000"
 
-# Component: Renders input box with copy button embedded INSIDE the right side
 def render_embedded_copy_input(label, state_key, input_id):
     val = st.session_state.get(state_key, "0.00000")
     
@@ -256,27 +255,24 @@ def analyze_chart_with_ai(pil_image, asset, timeframe):
     img_b64 = base64.b64encode(buffered.getvalue()).decode("utf-8")
 
     prompt = f"""
-You are an expert ICT (Inner Circle Trader) and Smart Money Concepts (SMC) quantitative analyst examining a {asset} {timeframe} chart.
-Perform an aggressive structural scan of price action focusing on:
+You are an elite ICT (Inner Circle Trader) and Smart Money Concepts (SMC) quantitative analyst examining a {asset} {timeframe} chart.
+Perform a strict structural scan using institutional ICT non-negotiable filter rules:
 
-1. DISPLACEMENT CANDLES:
-   - Identify if there is a strong, wide-range body expansion candle indicating institutional entry.
-   - Confirm if this displacement caused a Market Structure Shift (MSS), Break of Structure (BOS), or Liquidity Sweep.
+1. LIQUIDITY SWEEP & DISPLACEMENT (NON-NEGOTIABLE):
+   - Check if price swept Buy-Side Liquidity (BSL) or Sell-Side Liquidity (SSL) prior to momentum shift.
+   - Look for wide-range displacement body expansion candles breaking Market Structure (MSS / BOS).
+   - MANDATORY INVALIDATION: If price is consolidating, in mid-range chop, or lacks a clear liquidity sweep preceding displacement, you MUST set "bias": "NO_TRADE", "score": 0.0, "accuracy_percentage": 0.0, and explain the lack of institutional sponsorship in "rationale".
 
-2. FAIR VALUE GAP (FVG) MEASUREMENT:
+2. FAIR VALUE GAP (FVG) & CONSEQUENT ENCROACHMENT (CE):
    - Detect any 3-candle imbalance created by displacement.
-   - Bullish FVG: Gap between High of Candle 1 and Low of Candle 3.
-   - Bearish FVG: Gap between Low of Candle 1 and High of Candle 3.
-   - Estimate the exact FVG price boundaries (top_price, bottom_price) and calculate its size/height in points or pips.
-   - Determine current FVG status: 'OPEN', 'PARTIALLY_FILLED', or 'FULLY_FILLED'.
+   - Estimate exact FVG boundaries (top_price, bottom_price).
+   - Calculate Consequent Encroachment (ce_price) = 50% midpoint of the FVG zone: (top_price + bottom_price) / 2.
+   - ENTRY LOGIC: Set "entry" price strictly at the Consequent Encroachment (CE 50% level) inside the FVG array to maximize Risk-to-Reward (R:R), NOT at the outer boundary.
 
-3. KEY PRICE LEVELS:
-   - Extract numeric levels for Entry (optimal trade entry inside FVG or Order Block), Stop Loss (SL), and Targets (TP1, TP2, TP3).
-
-4. DIRECTIONAL BIAS, CONFLUENCE & ACCURACY:
-   - Determine directional bias ('BUY', 'SELL', or 'NO_TRADE').
-   - Rate setup quality score from 1.0 to 10.0 based on structural clarity.
-   - Estimate the setup win probability / accuracy percentage from 0.0 to 100.0 (e.g., 82.5 for an 82.5% high-probability setup).
+3. INVALIDATION / STOP LOSS & TARGETS:
+   - Stop Loss (SL): Placed strictly beyond the key swing high/low that generated the displacement move.
+   - Targets (TP1, TP2, TP3): Positioned at logical opposing liquidity pools (e.g., equal highs/lows, opposing order blocks).
+   - MINIMUM R:R RULE: Calculate Reward-to-Risk (Reward to TP1 / Risk to SL). If R:R is below 1:1.50, set "bias": "NO_TRADE".
 
 Return ONLY raw valid JSON matching this exact structure:
 {{
@@ -286,12 +282,13 @@ Return ONLY raw valid JSON matching this exact structure:
   "rationale": "string",
   "displacement": {{
     "detected": boolean,
-    "description": "string (e.g. Strong bullish expansion candle breaking 1.0850 high)"
+    "description": "string (e.g. BSL sweep followed by strong bearish displacement breaking 1.0850 low)"
   }},
   "fvg": {{
     "detected": boolean,
     "top_price": float,
     "bottom_price": float,
+    "ce_price": float,
     "size_points": float,
     "status": "OPEN" | "PARTIALLY_FILLED" | "FULLY_FILLED"
   }},
@@ -599,6 +596,12 @@ else:
                 except (ValueError, ZeroDivisionError):
                     rr_ratio = 0.0
 
+                # HARD PYTHON R:R FILTER CHECK (Minimum 1:1.50 Required)
+                MIN_RR_THRESHOLD = 1.50
+                if rr_ratio < MIN_RR_THRESHOLD and st.session_state.order_bias in ["BUY", "SELL"]:
+                    st.warning(f"⚠️ **SETUP INVALIDATED:** Risk-to-Reward ratio (1:{rr_ratio:.2f}) is below minimum requirement of 1:{MIN_RR_THRESHOLD:.2f}.")
+                    st.session_state.order_bias = "INVALID"
+
                 score_color = "#00E676" if st.session_state.trade_score >= 7.0 else ("#FFB300" if st.session_state.trade_score >= 5.0 else "#FF1744")
 
                 st.markdown(f"""
@@ -632,6 +635,7 @@ else:
                 if fvg.get("detected"):
                     fvg_bot = format_price(fvg.get('bottom_price', 0))
                     fvg_top = format_price(fvg.get('top_price', 0))
+                    fvg_ce = format_price(fvg.get('ce_price', 0))
                     fvg_size = fvg.get('size_points', 0)
                     fvg_status = fvg.get('status', 'OPEN')
 
@@ -639,6 +643,7 @@ else:
                     <div class="smc-card" style="border-left-color: #00B0FF;">
                         🎯 <b>FAIR VALUE GAP (FVG):</b><br/>
                         <b>Zone:</b> <code style="color: #00E676;">{fvg_bot} - {fvg_top}</code><br/>
+                        <b>CE (50% Midpoint):</b> <code style="color: #FFD700;">{fvg_ce}</code><br/>
                         <b>Size:</b> <code>{fvg_size:.2f} pts</code> | <b>Status:</b> <code>{fvg_status}</code>
                     </div>
                     """, unsafe_allow_html=True)
@@ -646,7 +651,6 @@ else:
                 st.write("")
                 st.markdown('<div class="section-header">2. PARAMETER VERIFICATION</div>', unsafe_allow_html=True)
 
-                # Render fields with copy buttons inside the right edge of each input box
                 render_embedded_copy_input("ENTRY PRICE", "ocr_entry", "entry")
                 render_embedded_copy_input("STOP LOSS (SL)", "ocr_sl", "sl")
                 render_embedded_copy_input("TARGET 1 (TP1)", "ocr_tp1", "tp1")
