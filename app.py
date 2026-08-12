@@ -225,7 +225,20 @@ def format_price(val):
     except (ValueError, TypeError):
         return "0.00000"
 
-# Component: Renders input box with copy button embedded INSIDE the right side
+def fetch_live_exchange_rates(base_curr="USD"):
+    try:
+        url = f"https://open.er-api.com/v6/latest/{base_curr}"
+        res = requests.get(url, timeout=5)
+        if res.status_code == 200:
+            return res.json().get("rates", {})
+    except Exception:
+        pass
+    # Offline Fallback Rates
+    return {
+        "USD": 1.0, "EUR": 0.92, "GBP": 0.78, "ZAR": 18.50, 
+        "NAD": 18.50, "JPY": 155.0, "AUD": 1.52, "CAD": 1.36, "CHF": 0.89
+    }
+
 def render_embedded_copy_input(label, state_key, input_id):
     val = st.session_state.get(state_key, "0.00000")
     
@@ -518,7 +531,8 @@ else:
     tabs = st.tabs([
         "📸 01. VISION SCAN & ORDER BUILDER",
         "📊 02. RISK MATRIX",
-        "⚡ 03. MT5 BRIDGE"
+        "⚡ 03. MT5 BRIDGE",
+        "💱 04. CURRENCY CONVERTER"
     ])
 
     with tabs[0]:
@@ -730,3 +744,64 @@ else:
         st.json(order)
         if st.button("🔥 DISPATCH TO MT5", type="primary", use_container_width=True):
             st.success("🚀 Signal Dispatched!")
+
+    with tabs[3]:
+        st.markdown('<div class="section-header">💱 LIVE CURRENCY CONVERTER & PIP MATRIX</div>', unsafe_allow_html=True)
+
+        col_conv_1, col_conv_2 = st.columns([1, 1], gap="large")
+
+        with col_conv_1:
+            st.markdown('<div class="section-header">1. REAL-TIME EXCHANGE RATE CONVERTER</div>', unsafe_allow_html=True)
+            
+            currencies_list = ["USD", "EUR", "GBP", "ZAR", "NAD", "JPY", "AUD", "CAD", "CHF"]
+            
+            col_curr_from, col_curr_to = st.columns(2)
+            with col_curr_from:
+                from_curr = st.selectbox("From Currency", currencies_list, index=0)
+            with col_curr_to:
+                to_curr = st.selectbox("To Currency", currencies_list, index=3) # Default to ZAR/NAD
+            
+            amount_input = st.number_input("Amount to Convert", value=100.0, step=10.0, format="%.2f")
+
+            rates_data = fetch_live_exchange_rates(from_curr)
+            target_rate = rates_data.get(to_curr, 1.0)
+            converted_val = amount_input * target_rate
+
+            st.markdown(f"""
+            <div style="background: rgba(15, 23, 42, 0.85); border: 1px solid rgba(0, 230, 118, 0.4); border-radius: 12px; padding: 20px; text-align: center; margin-top: 15px;">
+                <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.85rem; color: #94A3B8;">CONVERTED VALUE</div>
+                <div style="font-family: 'JetBrains Mono', monospace; font-size: 2.2rem; font-weight: 900; color: #00E676; margin: 6px 0;">
+                    {converted_val:,.2f} <span style="font-size: 1.2rem; color: #FFFFFF;">{to_curr}</span>
+                </div>
+                <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; color: #64748B;">
+                    Exchange Rate: 1 {from_curr} = {target_rate:.4f} {to_curr}
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+
+        with col_conv_2:
+            st.markdown('<div class="section-header">2. PIP VALUE & EQUITY EXPOSURE CALCULATOR</div>', unsafe_allow_html=True)
+
+            acc_currency = st.selectbox("Account Equity Base Currency", ["USD", "EUR", "GBP", "ZAR", "NAD"], index=0)
+            lot_size = st.number_input("Position Size (Lots)", value=1.00, step=0.10, format="%.2f")
+            stop_pips = st.number_input("Stop Loss Distance (Pips / Points)", value=20.0, step=5.0, format="%.1f")
+
+            # Standard Lot pip value approximation ($10 per pip for 1.0 lot USD pairs)
+            base_pip_value_usd = 10.0 * lot_size
+            acc_rates = fetch_live_exchange_rates("USD")
+            fx_mult = acc_rates.get(acc_currency, 1.0)
+
+            pip_val_acc = base_pip_value_usd * fx_mult
+            total_risk_acc = pip_val_acc * stop_pips
+
+            st.markdown(f"""
+            <div style="background: rgba(15, 23, 42, 0.85); border: 1px solid rgba(255, 23, 68, 0.4); border-radius: 12px; padding: 20px; text-align: center; margin-top: 15px;">
+                <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.85rem; color: #94A3B8;">TOTAL CASH AT RISK ({stop_pips} Pips)</div>
+                <div style="font-family: 'JetBrains Mono', monospace; font-size: 2.2rem; font-weight: 900; color: #FF1744; margin: 6px 0;">
+                    {total_risk_acc:,.2f} <span style="font-size: 1.2rem; color: #FFFFFF;">{acc_currency}</span>
+                </div>
+                <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; color: #64748B;">
+                    Pip Value: ~{pip_val_acc:.2f} {acc_currency} per pip @ {lot_size} lot
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
