@@ -230,6 +230,43 @@ def format_price(val):
     except (ValueError, TypeError):
         return "0.00000"
 
+@st.cache_data(ttl=1800)
+def fetch_economic_calendar():
+    try:
+        url = "https://nyl.forexfactory.com/ff_calendar_thisweek.json"
+        res = requests.get(url, timeout=6)
+        if res.status_code == 200:
+            return res.json()
+    except Exception:
+        pass
+    return []
+
+def get_relevant_news_events(asset_name, calendar_events):
+    if not asset_name or not calendar_events:
+        return []
+    
+    asset_upper = asset_name.upper()
+    known_currencies = ["USD", "EUR", "GBP", "JPY", "AUD", "CAD", "CHF", "NZD", "ZAR", "XAU"]
+    relevant_currencies = [c for c in known_currencies if c in asset_upper]
+    if "XAU" in asset_upper and "USD" not in relevant_currencies:
+        relevant_currencies.append("USD")
+        
+    matching_events = []
+    for ev in calendar_events:
+        country = str(ev.get("country", "")).upper()
+        impact = str(ev.get("impact", "")).capitalize()
+        
+        if country in relevant_currencies and impact in ["High", "Medium"]:
+            matching_events.append({
+                "title": ev.get("title", "Economic Event"),
+                "currency": country,
+                "impact": impact,
+                "date": ev.get("date", ""),
+                "forecast": ev.get("forecast", ""),
+                "previous": ev.get("previous", "")
+            })
+    return matching_events
+
 def fetch_live_exchange_rates(base_curr="USD"):
     try:
         url = f"https://open.er-api.com/v6/latest/{base_curr}"
@@ -238,7 +275,6 @@ def fetch_live_exchange_rates(base_curr="USD"):
             return res.json().get("rates", {})
     except Exception:
         pass
-    # Offline Fallback Rates
     return {
         "USD": 1.0, "EUR": 0.92, "GBP": 0.78, "ZAR": 18.50, 
         "NAD": 18.50, "JPY": 155.0, "AUD": 1.52, "CAD": 1.36, "CHF": 0.89
@@ -265,12 +301,14 @@ def render_embedded_copy_input(label, state_key, input_id):
     """
     components.html(html_code, height=72)
 
-def analyze_chart_with_ai(pil_images, asset, timeframe):
+def analyze_chart_with_ai(pil_images, asset, timeframe, news_warning=""):
     if not GEMINI_KEY:
         return {"error": "GEMINI_API_KEY missing in Streamlit Secrets. Go to App Settings -> Secrets to add it."}
 
     prompt = f"""
-You are an elite ICT (Inner Circle Trader) and Smart Money Concepts (SMC) quantitative analyst examining the provided {asset} {timeframe} chart screenshot(s) (Higher Timeframe and/or Lower Timeframe).
+You are an elite ICT (Inner Circle Trader) and Smart Money Concepts (SMC) quantitative analyst examining the provided {asset} {timeframe} chart screenshot(s).
+{news_warning}
+
 Perform a strict multi-timeframe structural scan using institutional ICT non-negotiable filter rules:
 
 1. HIGHER TIMEFRAME CONTEXT & LIQUIDITY SWEEP:
@@ -541,6 +579,29 @@ else:
     ])
 
     with tabs[0]:
+        # --- AUTOMATED LIVE ECONOMIC NEWS MONITOR ---
+        raw_calendar = fetch_economic_calendar()
+        matched_events = get_relevant_news_events(st.session_state.asset_name, raw_calendar)
+        high_impact_events = [e for e in matched_events if e["impact"] == "High"]
+        
+        news_prompt_warning = ""
+
+        if high_impact_events:
+            st.error(f"🔴 **RED FOLDER ALERT ({st.session_state.asset_name}):** {len(high_impact_events)} High-Impact Economic Event(s) Detected for this pair!")
+            with st.expander("📅 View Scheduled High-Impact Releases", expanded=True):
+                for ev in high_impact_events:
+                    st.markdown(f"• **[{ev['currency']}] {ev['title']}** | Impact: `HIGH` | Forecast: `{ev['forecast']}` | Prev: `{ev['previous']}`")
+            news_prompt_warning = f"\nWARNING: High-impact economic news releases ({', '.join([e['title'] for e in high_impact_events])}) are scheduled for {st.session_state.asset_name}. Be cautious of spread widening, slippage, and unpredictable volatility spikes."
+        elif matched_events:
+            st.warning(f"🟠 **MEDIUM IMPACT NEWS:** {len(matched_events)} Event(s) scheduled for {st.session_state.asset_name}.")
+            with st.expander("📅 View Economic Releases", expanded=False):
+                for ev in matched_events:
+                    st.markdown(f"• **[{ev['currency']}] {ev['title']}** | Impact: `{ev['impact']}` | Forecast: `{ev['forecast']}` | Prev: `{ev['previous']}`")
+        else:
+            st.caption(f"🟢 **NEWS MONITOR:** No High/Medium impact economic news releases detected for {st.session_state.asset_name} today.")
+
+        st.write("")
+
         col_scan_left, col_scan_right = st.columns([1.1, 1], gap="large")
 
         with col_scan_left:
@@ -566,7 +627,7 @@ else:
 
                 if st.button("⚡ EXECUTE VISION EXTRACTION", type="primary", use_container_width=True):
                     with st.spinner(f"Scanning market structure across {len(pil_images)} uploaded chart(s)..."):
-                        analysis = analyze_chart_with_ai(pil_images, st.session_state.asset_name, st.session_state.timeframe)
+                        analysis = analyze_chart_with_ai(pil_images, st.session_state.asset_name, st.session_state.timeframe, news_prompt_warning)
 
                         if analysis and "error" not in analysis:
                             st.session_state.ocr_entry = format_price(analysis.get("entry", 0.0))
