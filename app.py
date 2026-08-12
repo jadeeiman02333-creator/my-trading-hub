@@ -5,10 +5,17 @@ import io
 import base64
 import requests
 import pandas as pd
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 import streamlit as st
 import streamlit.components.v1 as components
 from PIL import Image
+
+# Timezone resolution for NY (EST/EDT)
+try:
+    from zoneinfo import ZoneInfo
+    NY_TZ = ZoneInfo("America/New_York")
+except Exception:
+    NY_TZ = None
 
 # ---------------------------------------------------------
 # Page Configuration & Styling (Custom Favicon)
@@ -229,6 +236,26 @@ def format_price(val):
         return f"{num:.2f}" if num > 500 else f"{num:.5f}"
     except (ValueError, TypeError):
         return "0.00000"
+
+def get_ict_killzone_status():
+    if NY_TZ:
+        now_ny = datetime.now(NY_TZ)
+    else:
+        now_ny = datetime.now(timezone(timedelta(hours=-4))) # Fallback EST/EDT offset
+        
+    ny_time_str = now_ny.strftime("%H:%M:%S")
+    time_decimal = now_ny.hour + now_ny.minute / 60.0
+
+    if 2.0 <= time_decimal < 5.0:
+        return "🇬🇧 LONDON KILLZONE", ny_time_str, "🟢", "HIGH PROBABILITY // Institutional Manipulation & High/Low of Day Formation"
+    elif 7.0 <= time_decimal < 10.0:
+        return "🇺🇸 NEW YORK AM KILLZONE", ny_time_str, "🟢", "HIGH PROBABILITY // Institutional Momentum Expansion & Continuation"
+    elif 13.0 <= time_decimal < 15.0:
+        return "🇺🇸 NEW YORK PM KILLZONE", ny_time_str, "🟡", "MODERATE PROBABILITY // Afternoon Retracement & Position Settlement Window"
+    elif 20.0 <= time_decimal <= 23.99 or 0.0 <= time_decimal < 2.0:
+        return "🌏 ASIAN SESSION / RANGE", ny_time_str, "🔵", "CONSOLIDATION // Liquidity Building Phase (Low Volume — Avoid Breakout Entries)"
+    else:
+        return "⏸️ OUT OF KILLZONE", ny_time_str, "⚪", "OFF-HOURS // Low Institutional Volume (Increased Spread & Slippage Risk)"
 
 @st.cache_data(ttl=1800)
 def fetch_economic_calendar():
@@ -600,7 +627,17 @@ else:
         else:
             st.caption(f"🟢 **NEWS MONITOR:** No High/Medium impact economic news releases detected for {st.session_state.asset_name} today.")
 
-        st.write("")
+        # --- AUTOMATED LIVE ICT KILLZONE SESSION MONITOR ---
+        kz_name, kz_time, kz_icon, kz_desc = get_ict_killzone_status()
+        st.markdown(f"""
+        <div style="background: rgba(15, 23, 42, 0.8); border: 1px solid rgba(0, 230, 118, 0.3); border-radius: 8px; padding: 10px 14px; margin-top: 6px; margin-bottom: 16px; font-family: 'JetBrains Mono', monospace;">
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap;">
+                <span style="font-weight: 800; font-size: 0.85rem; color: #FFFFFF;">{kz_icon} CURRENT SESSION: <span style="color: #00E676;">{kz_name}</span></span>
+                <span style="font-size: 0.78rem; color: #94A3B8;">NY TIME: <strong style="color: #00E676;">{kz_time} EST</strong></span>
+            </div>
+            <div style="font-size: 0.72rem; color: #64748B; margin-top: 4px;">{kz_desc}</div>
+        </div>
+        """, unsafe_allow_html=True)
 
         col_scan_left, col_scan_right = st.columns([1.1, 1], gap="large")
 
