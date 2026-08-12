@@ -4,6 +4,8 @@ import re
 import io
 import base64
 import requests
+import pandas as pd
+from datetime import datetime
 import streamlit as st
 import streamlit.components.v1 as components
 from PIL import Image
@@ -212,6 +214,9 @@ if "fvg_data" not in st.session_state:
     st.session_state.fvg_data = {}
 if "disp_data" not in st.session_state:
     st.session_state.disp_data = {}
+
+if "trade_history" not in st.session_state:
+    st.session_state.trade_history = []
 
 raw_key = st.secrets.get("GEMINI_API_KEY", os.getenv("GEMINI_API_KEY", ""))
 GEMINI_KEY = str(raw_key).strip().strip('"').strip("'")
@@ -745,6 +750,128 @@ else:
         if st.button("🔥 DISPATCH TO MT5", type="primary", use_container_width=True):
             st.success("🚀 Signal Dispatched!")
 
+        st.markdown("---")
+        st.markdown('<div class="section-header">📈 TRADE PERFORMANCE & WIN RATE LOGGER</div>', unsafe_allow_html=True)
+
+        col_log_left, col_log_right = st.columns([1.1, 1], gap="large")
+
+        with col_log_left:
+            st.markdown('<div class="section-header">1. LOG EXECUTED TRADE</div>', unsafe_allow_html=True)
+            active_ord = st.session_state.get("active_order", {})
+            
+            with st.form("log_trade_form"):
+                log_asset = st.text_input("Asset / Pair", value=active_ord.get("asset", st.session_state.get("asset_name", "EURUSD")))
+                log_bias = st.selectbox("Direction", ["BUY", "SELL"], index=0 if active_ord.get("type") != "SELL" else 1)
+                log_outcome = st.selectbox("Trade Outcome", ["WIN", "LOSS", "BREAKEVEN"])
+                
+                col_r1, col_r2 = st.columns(2)
+                with col_r1:
+                    default_r = 2.0 if log_outcome == "WIN" else (-1.0 if log_outcome == "LOSS" else 0.0)
+                    log_r = st.number_input("R-Multiple (e.g. +2.0 or -1.0)", value=default_r, step=0.5)
+                with col_r2:
+                    log_pnl = st.number_input("PnL ($ Cash Return)", value=0.0, step=10.0)
+                    
+                log_notes = st.text_area("Trade Rationale / Notes", value=active_ord.get("rationale", ""), height=80)
+                
+                submit_log = st.form_submit_button("💾 RECORD TRADE TO JOURNAL", type="primary", use_container_width=True)
+
+                if submit_log:
+                    new_entry = {
+                        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M"),
+                        "asset": log_asset,
+                        "timeframe": st.session_state.get("timeframe", "M30"),
+                        "type": log_bias,
+                        "outcome": log_outcome,
+                        "r_multiple": float(log_r),
+                        "pnl": float(log_pnl),
+                        "score": active_ord.get("score", 0.0),
+                        "notes": log_notes
+                    }
+                    st.session_state.trade_history.append(new_entry)
+                    st.success("✅ Trade successfully logged to performance journal!")
+                    st.rerun()
+
+        with col_log_right:
+            st.markdown('<div class="section-header">2. WIN RATE & EQUITY METRICS</div>', unsafe_allow_html=True)
+            history = st.session_state.trade_history
+            
+            total_trades = len(history)
+            wins = sum(1 for t in history if t["outcome"] == "WIN")
+            losses = sum(1 for t in history if t["outcome"] == "LOSS")
+            breakevens = sum(1 for t in history if t["outcome"] == "BREAKEVEN")
+            
+            valid_outcomes = wins + losses
+            win_rate = (wins / valid_outcomes * 100) if valid_outcomes > 0 else 0.0
+            net_r = sum(t.get("r_multiple", 0.0) for t in history)
+            total_pnl = sum(t.get("pnl", 0.0) for t in history)
+
+            wr_color = "#00E676" if win_rate >= 50.0 else ("#FFB300" if win_rate >= 40.0 else "#FF1744")
+
+            st.markdown(f"""
+            <div class="analysis-card" style="text-align: center; padding: 20px;">
+                <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.85rem; color: #94A3B8;">WIN RATE (EXCLUDING BE)</div>
+                <div style="font-family: 'JetBrains Mono', monospace; font-size: 2.8rem; font-weight: 900; color: {wr_color}; margin: 8px 0;">
+                    {win_rate:.1f}%
+                </div>
+                <div style="margin-top: 10px;">
+                    <span class="stat-badge" style="background: rgba(0, 230, 118, 0.15); color: #00E676; border: 1px solid #00E676;">
+                        WINS: {wins}
+                    </span>
+                    <span class="stat-badge" style="background: rgba(255, 23, 68, 0.15); color: #FF1744; border: 1px solid #FF1744;">
+                        LOSSES: {losses}
+                    </span>
+                    <span class="stat-badge" style="background: rgba(255, 179, 0, 0.15); color: #FFB300; border: 1px solid #FFB300;">
+                        BE: {breakevens}
+                    </span>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+
+            col_m1, col_m2 = st.columns(2)
+            with col_m1:
+                st.markdown(f"""
+                <div class="smc-card" style="border-left-color: #00E676; text-align: center;">
+                    <div style="font-size: 0.75rem; color: #94A3B8;">CUMULATIVE RETURN</div>
+                    <div style="font-size: 1.4rem; font-weight: 800; color: #00E676;">{net_r:+.1f} R</div>
+                </div>
+                """, unsafe_allow_html=True)
+            with col_m2:
+                st.markdown(f"""
+                <div class="smc-card" style="border-left-color: #00B0FF; text-align: center;">
+                    <div style="font-size: 0.75rem; color: #94A3B8;">TOTAL P&L</div>
+                    <div style="font-size: 1.4rem; font-weight: 800; color: #00B0FF;">${total_pnl:+,.2f}</div>
+                </div>
+                """, unsafe_allow_html=True)
+
+        st.markdown("---")
+        st.markdown('<div class="section-header">3. HISTORICAL PERFORMANCE JOURNAL</div>', unsafe_allow_html=True)
+
+        if history:
+            df_history = pd.DataFrame(history)
+            st.dataframe(
+                df_history[["timestamp", "asset", "timeframe", "type", "outcome", "r_multiple", "pnl", "score", "notes"]],
+                use_container_width=True,
+                hide_index=True
+            )
+            
+            col_csv, col_clr = st.columns([1, 1])
+            with col_csv:
+                csv_data = df_history.to_csv(index=False)
+                st.download_button(
+                    "💾 EXPORT TRADE JOURNAL (CSV)",
+                    data=csv_data,
+                    file_name="killzone_trade_journal.csv",
+                    mime="text/csv",
+                    use_container_width=True,
+                    type="primary"
+                )
+            with col_clr:
+                if st.button("🗑️ CLEAR PERFORMANCE LOGS", use_container_width=True):
+                    st.session_state.trade_history = []
+                    st.rerun()
+        else:
+            st.info("💡 No trades logged yet. Fill out the form above to record your first trade result!")
+
     with tabs[3]:
         st.markdown('<div class="section-header">💱 LIVE CURRENCY CONVERTER & PIP MATRIX</div>', unsafe_allow_html=True)
 
@@ -759,7 +886,7 @@ else:
             with col_curr_from:
                 from_curr = st.selectbox("From Currency", currencies_list, index=0)
             with col_curr_to:
-                to_curr = st.selectbox("To Currency", currencies_list, index=3) # Default to ZAR/NAD
+                to_curr = st.selectbox("To Currency", currencies_list, index=3)
             
             amount_input = st.number_input("Amount to Convert", value=100.0, step=10.0, format="%.2f")
 
@@ -786,7 +913,6 @@ else:
             lot_size = st.number_input("Position Size (Lots)", value=1.00, step=0.10, format="%.2f")
             stop_pips = st.number_input("Stop Loss Distance (Pips / Points)", value=20.0, step=5.0, format="%.1f")
 
-            # Standard Lot pip value approximation ($10 per pip for 1.0 lot USD pairs)
             base_pip_value_usd = 10.0 * lot_size
             acc_rates = fetch_live_exchange_rates("USD")
             fx_mult = acc_rates.get(acc_currency, 1.0)
