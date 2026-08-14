@@ -249,7 +249,7 @@ def get_ict_killzone_status():
     if 2.0 <= time_decimal < 5.0:
         return "🇬🇧 LONDON KILLZONE", ny_time_str, "🟢", "HIGH PROBABILITY // Institutional Manipulation & High/Low of Day Formation"
     elif 7.0 <= time_decimal < 10.0:
-        return "🇺🇸 NEW YORK AM KILLZONE", ny_time_str, "🟢", "HIGH PROBABILITY // Institutional Momentum Expansion & Continuation"
+        return "🇺🇸 NEW YORK AM KILLZONE", ny_time_str, "🟢", "HIGH PROBABILITY // Institutional Momentum Expansion & Silver Bullet Window"
     elif 13.0 <= time_decimal < 15.0:
         return "🇺🇸 NEW YORK PM KILLZONE", ny_time_str, "🟡", "MODERATE PROBABILITY // Afternoon Retracement & Position Settlement Window"
     elif 20.0 <= time_decimal <= 23.99 or 0.0 <= time_decimal < 2.0:
@@ -333,55 +333,55 @@ def analyze_chart_with_ai(pil_images, asset, timeframe, news_warning=""):
         return {"error": "GEMINI_API_KEY missing in Streamlit Secrets. Go to App Settings -> Secrets to add it."}
 
     prompt = f"""
-You are an elite ICT (Inner Circle Trader) and Smart Money Concepts (SMC) quantitative analyst examining the provided {asset} {timeframe} chart screenshot(s).
+You are an elite ICT (Inner Circle Trader) and Smart Money Concepts (SMC) quantitative scalping analyst examining the provided {asset} {timeframe} chart screenshot(s).
 {news_warning}
 
 ================================================================================
-INTEGRATED 3-TIER OPERATIONAL FRAMEWORK (ICT / SMC NATIVE INTEGRATION)
+1. DUAL-DIRECTION EVALUATION PROTOCOL (BI-DIRECTIONAL SCANNING)
 ================================================================================
-In institutional trading, ICT/SMC acts as the native bridge connecting Trend Following and Mean Reversion:
+You MUST evaluate BOTH Buy (Long) and Sell (Short) opportunities before making a final decision:
 
-1. TIER 1: TREND FOLLOWING (Context & Direction)
-   - ICT/SMC Equivalent: Higher Timeframe (HTF) Market Structure / Daily Bias
-   - Objective: Determine macro order flow direction before evaluating setups.
-
-2. TIER 2: MEAN REVERSION (Valuation Check)
-   - ICT/SMC Equivalent: Premium vs. Discount / Equilibrium (50% Consequent Encroachment / CE of FVG)
-   - Objective: Verify price is at favorable valuation relative to the active dealing range (Premium for Shorts, Discount for Longs).
-
-3. TIER 3: PRECISION EXECUTION (ICT / SMC Entry)
-   - ICT/SMC Equivalent: Liquidity Sweep + Displacement + FVG Entry
-   - Objective: Pinpoint execution entries following buy-side/sell-side liquidity sweeps and impulsive displacement.
+- STEP A (BULLISH SCAN): Check if price swept Sell-Side Liquidity (SSL), created upward displacement, and formed a Bullish Fair Value Gap (FVG).
+- STEP B (BEARISH SCAN): If Step A yields no setup (or if price swept Buy-Side Liquidity / BSL), IMMEDIATELY evaluate a Bearish Short trade. Look for downward displacement, Market Structure Shift (MSS/BOS), and a Bearish FVG.
+- SELECTION RULE: Select the trade direction (BUY or SELL) that presents the clearest liquidity sweep, strongest displacement, and highest probability edge.
+- ONLY set "bias": "NO_TRADE" if BOTH Bullish and Bearish scenarios fail strict institutional quality filters.
 
 ================================================================================
-INSTITUTIONAL NON-NEGOTIABLE SCANNING RULES
+2. EXECUTION HIERARCHY & M1 / M5 SCALPING RULES
 ================================================================================
-1. HIGHER TIMEFRAME CONTEXT & LIQUIDITY SWEEP (Tier 1 & Tier 3):
-   - Align execution with HTF bias (where market gravity/liquidity lies).
-   - Check if price swept Buy-Side Liquidity (BSL) or Sell-Side Liquidity (SSL) prior to momentum shift.
-   - Look for wide-range displacement body expansion candles breaking Market Structure (MSS / BOS).
-   - MANDATORY INVALIDATION: If price is consolidating, in mid-range chop, or lacks a clear liquidity sweep preceding displacement, you MUST set "bias": "NO_TRADE", "score": 0.0, "accuracy_percentage": 0.0, and explain the lack of institutional sponsorship in "rationale".
+1. PRIMARY FILTER (LIQUIDITY SWEEP & DISPLACEMENT):
+   - Identify recent swing highs/lows or session liquidity pools (BSL/SSL) that were swept.
+   - Look for rapid expansion candles (displacement) immediately following the sweep that break market structure.
 
-2. FAIR VALUE GAP (FVG) & CONSEQUENT ENCROACHMENT / CE (Tier 2 & Tier 3):
-   - Detect any 3-candle imbalance created by displacement.
+2. ENTRY SELECTION (FAIR VALUE GAP & CONSEQUENT ENCROACHMENT):
+   - Locate the 3-candle imbalance formed during displacement.
    - Estimate exact FVG boundaries (top_price, bottom_price).
-   - Calculate Consequent Encroachment (ce_price) = 50% midpoint of the FVG zone: (top_price + bottom_price) / 2.
-   - ENTRY LOGIC: Set "entry" price strictly at the Consequent Encroachment (CE 50% level) inside the FVG array to maximize Risk-to-Reward (R:R), NOT at the outer boundary.
+   - Prefer setting "entry" price strictly at the 50% Consequent Encroachment (CE) midpoint:
+     ce_price = (top_price + bottom_price) / 2
+   - FLEXIBLE ENTRY RULE: If price has already tapped the outer FVG boundary and started expanding, set entry at the current zone edge so the setup is not missed.
 
-3. INVALIDATION / STOP LOSS & TARGETS:
-   - Stop Loss (SL): Placed strictly beyond the key swing high/low that generated the displacement move.
-   - Targets (TP1, TP2, TP3): Positioned at logical opposing liquidity pools (e.g., equal highs/lows, opposing order blocks).
-   - MINIMUM R:R RULE: Calculate Reward-to-Risk (Reward to TP1 / Risk to SL). If R:R is below 1:1.50, set "bias": "NO_TRADE".
+3. SCALPING TARGETS & RISK MATRIX:
+   - Stop Loss (SL): Placed strictly beyond the key wick or swing level generating the displacement.
+   - Targets (TP1, TP2, TP3): Tailored for lower timeframe momentum (TP1 = 10–15 pips or nearest internal liquidity pool; TP2/TP3 at major opposing liquidity pools).
+   - MINIMUM R:R RULE: Target TP1 must yield >= 1:1.50 Reward-to-Risk relative to structural SL. If R:R is below 1:1.50, set "bias": "NO_TRADE".
+
+================================================================================
+3. CRITICAL PRICE EXTRACTION & Y-AXIS ALIGNMENT RULES
+================================================================================
+- Carefully align candidate FVG boundaries, Entry, Stop Loss, and Take Profit levels with the visible numerical Y-axis price scale on the chart.
+- Double-check all extracted numbers to ensure logical price order:
+  * For BUY: SL < Entry < TP1 < TP2 < TP3
+  * For SELL: SL > Entry > TP1 > TP2 > TP3
 
 Return ONLY raw valid JSON matching this exact structure:
 {{
   "bias": "BUY" | "SELL" | "NO_TRADE",
   "score": float,
   "accuracy_percentage": float,
-  "rationale": "string",
+  "rationale": "Detailed explanation explaining why BUY or SELL was selected after evaluating both directions.",
   "displacement": {{
     "detected": boolean,
-    "description": "string (e.g. BSL sweep followed by strong bearish displacement breaking 1.0850 low)"
+    "description": "string"
   }},
   "fvg": {{
     "detected": boolean,
@@ -401,11 +401,18 @@ Return ONLY raw valid JSON matching this exact structure:
 
     parts = [{"text": prompt}]
 
+    # Fix 1: Explicitly tag multi-chart roles (HTF Context vs LTF Execution)
     for idx, img in enumerate(pil_images):
         buffered = io.BytesIO()
         img.save(buffered, format="PNG")
         img_b64 = base64.b64encode(buffered.getvalue()).decode("utf-8")
-        parts.append({"text": f"Chart Screenshot #{idx + 1}:"})
+        
+        if len(pil_images) > 1:
+            label_text = f"Chart Screenshot #{idx + 1} [HIGHER TIMEFRAME CONTEXT]:" if idx == 0 else f"Chart Screenshot #{idx + 1} [LOWER TIMEFRAME EXECUTION ({timeframe})]:"
+        else:
+            label_text = f"Chart Screenshot #{idx + 1} ({timeframe}):"
+            
+        parts.append({"text": label_text})
         parts.append({
             "inline_data": {
                 "mime_type": "image/png",
@@ -534,7 +541,7 @@ with st.sidebar:
     if not st.session_state.settings_submitted:
         with st.form(key="asset_settings_form"):
             asset_input = st.text_input("Active Asset / Instrument", value="", placeholder="e.g. EURUSD, XAUUSD")
-            timeframe_input = st.selectbox("Execution Timeframe", ["M1", "M5", "M15", "M30", "H1", "H4", "D1"], index=3)
+            timeframe_input = st.selectbox("Execution Timeframe", ["M1", "M5", "M15", "M30", "H1", "H4", "D1"], index=1)
             submit_button = st.form_submit_button(label="LAUNCH SESSION", type="primary", use_container_width=True)
 
             if submit_button:
@@ -631,12 +638,13 @@ else:
         
         news_prompt_warning = ""
 
+        # Fix 2: Contextual news injection (doesn't force artificial NO_TRADE)
         if high_impact_events:
             st.error(f"🔴 **RED FOLDER ALERT ({st.session_state.asset_name}):** {len(high_impact_events)} High-Impact Economic Event(s) Detected for this pair!")
             with st.expander("📅 View Scheduled High-Impact Releases", expanded=True):
                 for ev in high_impact_events:
                     st.markdown(f"• **[{ev['currency']}] {ev['title']}** | Impact: `HIGH` | Forecast: `{ev['forecast']}` | Prev: `{ev['previous']}`")
-            news_prompt_warning = f"\nWARNING: High-impact economic news releases ({', '.join([e['title'] for e in high_impact_events])}) are scheduled for {st.session_state.asset_name}. Be cautious of spread widening, slippage, and unpredictable volatility spikes."
+            news_prompt_warning = f"\nCONTEXTUAL NOTE: High-impact economic news releases ({', '.join([e['title'] for e in high_impact_events])}) are scheduled today for {st.session_state.asset_name}. Evaluate technical market structure normally, but ensure Stop Loss is placed strictly beyond structural swing extremes to handle potential spread expansion."
         elif matched_events:
             st.warning(f"🟠 **MEDIUM IMPACT NEWS:** {len(matched_events)} Event(s) scheduled for {st.session_state.asset_name}.")
             with st.expander("📅 View Economic Releases", expanded=False):
@@ -844,7 +852,7 @@ else:
                     "rationale": st.session_state.trade_rationale
                 }
             else:
-                st.info("💡 Upload one or more chart screenshots on the left (e.g. H4 + M15) and click 'EXECUTE VISION EXTRACTION' to analyze market structure across timeframes.")
+                st.info("💡 Upload one or more chart screenshots on the left (e.g. H4 + M5) and click 'EXECUTE VISION EXTRACTION' to analyze market structure across timeframes.")
 
     with tabs[1]:
         order = st.session_state.get("active_order", {})
