@@ -237,11 +237,58 @@ def format_price(val):
     except (ValueError, TypeError):
         return "0.00000"
 
+def send_mobile_notification(trade_data):
+    """
+    Helper Function: Dispatches trade alerts to mobile via Discord/Webhook endpoint.
+    Reads DISCORD_WEBHOOK_URL or WEBHOOK_URL from Streamlit Secrets.
+    """
+    webhook_url = st.secrets.get("DISCORD_WEBHOOK_URL", os.getenv("DISCORD_WEBHOOK_URL", st.secrets.get("WEBHOOK_URL", "")))
+    if not webhook_url:
+        return False, "No Webhook URL configured in Secrets (add DISCORD_WEBHOOK_URL)."
+
+    asset = trade_data.get("asset", st.session_state.get("asset_name", "EURUSD"))
+    bias = trade_data.get("type", trade_data.get("bias", "INVALID"))
+    entry = trade_data.get("entry", "0.00000")
+    sl = trade_data.get("sl", "0.00000")
+    tp1 = trade_data.get("tp1", "0.00000")
+    score = float(trade_data.get("score", 0.0))
+    timeframe = trade_data.get("timeframe", st.session_state.get("timeframe", "M30"))
+    rationale = str(trade_data.get("rationale", "No rationale provided."))
+
+    emoji = "🟢" if bias == "BUY" else ("🔴" if bias == "SELL" else "⚠️")
+    color_code = 65280 if bias == "BUY" else (16711680 if bias == "SELL" else 16766720)
+
+    payload = {
+        "username": "Killzone Vision Alert",
+        "embeds": [{
+            "title": f"{emoji} NEW ICT SIGNAL: {asset} [{timeframe}]",
+            "description": f"**Order Direction:** `{bias}`\n**Quality Score:** `{score:.1f}/10`\n\n**Rationale:** {rationale[:300]}...",
+            "color": color_code,
+            "fields": [
+                {"name": "🎯 Entry Price", "value": f"`{entry}`", "inline": True},
+                {"name": "🛑 Stop Loss", "value": f"`{sl}`", "inline": True},
+                {"name": "🏁 Target 1 (TP1)", "value": f"`{tp1}`", "inline": True}
+            ],
+            "footer": {
+                "text": "Killzone Algorithmic Terminal // Vision Scanner Push Engine"
+            },
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }]
+    }
+
+    try:
+        res = requests.post(webhook_url, json=payload, timeout=6)
+        if res.status_code in [200, 204]:
+            return True, "Notification sent!"
+        return False, f"HTTP Error {res.status_code}: {res.text}"
+    except Exception as e:
+        return False, f"Request failed: {str(e)}"
+
 def get_ict_killzone_status():
     if NY_TZ:
         now_ny = datetime.now(NY_TZ)
     else:
-        now_ny = datetime.now(timezone(timedelta(hours=-4))) # Fallback EST/EDT offset
+        now_ny = datetime.now(timezone(timedelta(hours=-4)))
         
     ny_time_str = now_ny.strftime("%H:%M:%S")
     time_decimal = now_ny.hour + now_ny.minute / 60.0
@@ -401,7 +448,6 @@ Return ONLY raw valid JSON matching this exact structure:
 
     parts = [{"text": prompt}]
 
-    # Fix 1: Explicitly tag multi-chart roles (HTF Context vs LTF Execution)
     for idx, img in enumerate(pil_images):
         buffered = io.BytesIO()
         img.save(buffered, format="PNG")
@@ -631,14 +677,12 @@ else:
     ])
 
     with tabs[0]:
-        # --- AUTOMATED LIVE ECONOMIC NEWS MONITOR ---
         raw_calendar = fetch_economic_calendar()
         matched_events = get_relevant_news_events(st.session_state.asset_name, raw_calendar)
         high_impact_events = [e for e in matched_events if e["impact"] == "High"]
         
         news_prompt_warning = ""
 
-        # Fix 2: Contextual news injection (doesn't force artificial NO_TRADE)
         if high_impact_events:
             st.error(f"🔴 **RED FOLDER ALERT ({st.session_state.asset_name}):** {len(high_impact_events)} High-Impact Economic Event(s) Detected for this pair!")
             with st.expander("📅 View Scheduled High-Impact Releases", expanded=True):
@@ -653,7 +697,6 @@ else:
         else:
             st.caption(f"🟢 **NEWS MONITOR:** No High/Medium impact economic news releases detected for {st.session_state.asset_name} today.")
 
-        # --- AUTOMATED LIVE ICT KILLZONE SESSION MONITOR ---
         kz_name, kz_time, kz_icon, kz_desc = get_ict_killzone_status()
         st.markdown(f"""
         <div style="background: rgba(15, 23, 42, 0.8); border: 1px solid rgba(0, 230, 118, 0.3); border-radius: 8px; padding: 10px 14px; margin-top: 6px; margin-bottom: 16px; font-family: 'JetBrains Mono', monospace;">
@@ -713,6 +756,20 @@ else:
                             ai_bias = str(analysis.get("bias", "NO_TRADE")).upper()
                             if ai_bias in ["BUY", "SELL"]:
                                 st.session_state.order_bias = ai_bias
+                                # Automatically dispatch mobile notification if webhook exists
+                                trade_payload = {
+                                    "asset": st.session_state.asset_name,
+                                    "timeframe": st.session_state.timeframe,
+                                    "type": ai_bias,
+                                    "entry": st.session_state.ocr_entry,
+                                    "sl": st.session_state.ocr_sl,
+                                    "tp1": st.session_state.ocr_tp1,
+                                    "score": score_val,
+                                    "rationale": st.session_state.trade_rationale
+                                }
+                                notification_sent, notif_msg = send_mobile_notification(trade_payload)
+                                if notification_sent:
+                                    st.toast("📱 Mobile notification dispatched!", icon="🚀")
                             else:
                                 st.session_state.order_bias = "INVALID"
                         else:
@@ -747,7 +804,6 @@ else:
                 except (ValueError, ZeroDivisionError):
                     rr_ratio = 0.0
 
-                # HARD PYTHON R:R FILTER CHECK (Minimum 1:1.50 Required)
                 MIN_RR_THRESHOLD = 1.50
                 if rr_ratio < MIN_RR_THRESHOLD and st.session_state.order_bias in ["BUY", "SELL"]:
                     st.warning(f"⚠️ **SETUP INVALIDATED:** Risk-to-Reward ratio (1:{rr_ratio:.2f}) is below minimum requirement of 1:{MIN_RR_THRESHOLD:.2f}.")
@@ -819,6 +875,23 @@ else:
                         render_embedded_copy_input("TARGET 3 (TP3)", "ocr_tp3", "tp3")
                 except ValueError:
                     pass
+
+                # Manual push alert trigger
+                if st.button("📱 SEND MOBILE PUSH ALERT", use_container_width=True):
+                    sent_ok, notif_res = send_mobile_notification({
+                        "asset": st.session_state.asset_name,
+                        "timeframe": st.session_state.timeframe,
+                        "type": st.session_state.order_bias,
+                        "entry": st.session_state.ocr_entry,
+                        "sl": st.session_state.ocr_sl,
+                        "tp1": st.session_state.ocr_tp1,
+                        "score": st.session_state.trade_score,
+                        "rationale": st.session_state.trade_rationale
+                    })
+                    if sent_ok:
+                        st.success("✅ Mobile alert dispatched successfully!")
+                    else:
+                        st.error(f"🚨 Notification failed: {notif_res}")
 
                 st.markdown("---")
                 st.markdown('<div class="section-header">ORDER DIRECTION BIAS</div>', unsafe_allow_html=True)
